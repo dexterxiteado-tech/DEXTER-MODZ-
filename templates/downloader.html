@@ -1,0 +1,157 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BOT Downloader</title>
+
+<style>
+
+body{
+margin:0;
+height:100vh;
+display:flex;
+justify-content:center;
+align-items:center;
+background:linear-gradient(135deg,#0f172a,#020617);
+font-family:Arial;
+color:white;
+overflow:hidden;
+}
+
+/* 💖 CORAZONES */
+.hearts{
+position:absolute;
+width:100%;
+height:100%;
+overflow:hidden;
+top:0;
+left:0;
+}
+
+.heart{
+position:absolute;
+color:#ff4da6;
+font-size:20px;
+animation:floatUp linear infinite;
+opacity:0.7;
+}
+
+@keyframes floatUp{
+0%{
+transform:translateY(100vh) scale(0.5);
+opacity:0;
+}
+50%{
+opacity:1;
+}
+100%{
+transform:translateY(-10vh) scale(1.2);
+opacity:0;
+}
+}
+
+/* 📦 CARD */
+.container{
+position:relative;
+background:#020617cc;
+padding:30px;
+border-radius:20px;
+text-align:center;
+width:320px;
+max-width:90%;
+backdrop-filter:blur(10px);
+box-shadow:0 0 25px #ff4da655;
+z-index:1;
+}
+
+/* 🖼 IMAGEN */
+.container img{
+width:120px;
+border-radius:15px;
+margin-bottom:15px;
+box-shadow:0 0 15px #ff4da6;
+}
+
+/* 🧠 TEXTO */
+.title{
+font-size:18px;
+margin-bottom:10px;
+color:#ff80bf;
+}
+
+.list{
+font-size:14px;
+margin-bottom:20px;
+line-height:1.6;
+}
+
+/* 💖 BOTÓN */
+.btn{
+display:inline-block;
+padding:12px 25px;
+background:#ff4da6;
+color:white;
+border-radius:10px;
+text-decoration:none;
+font-weight:bold;
+transition:0.3s;
+box-shadow:0 0 10px #ff4da6;
+}
+
+.btn:hover{
+background:#ff1a8c;
+transform:scale(1.1);
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="hearts" id="hearts"></div>
+
+<div class="container">
+
+<img src="/static/audio/img/bot.png">
+
+<div class="title">💖 BOT PARA DESCARGAR VIDEOS</div>
+
+<div class="list">
+- INSTAGRAM<br>
+- YOUTUBE<br>
+- FACEBOOK
+</div>
+
+<a href="https://t.me/Alyamimor_bot" target="_blank" class="btn">IR 🩷</a>
+
+</div>
+
+<script>
+
+/* 💖 GENERAR CORAZONES */
+const heartsContainer = document.getElementById("hearts");
+
+function crearCorazon(){
+const heart = document.createElement("div");
+heart.classList.add("heart");
+heart.innerHTML = "🩷";
+
+heart.style.left = Math.random() * 100 + "vw";
+heart.style.fontSize = (15 + Math.random() * 25) + "px";
+heart.style.animationDuration = (4 + Math.random() * 4) + "s";
+
+heartsContainer.appendChild(heart);
+
+setTimeout(() => {
+heart.remove();
+}, 8000);
+}
+
+setInterval(crearCorazon, 300);
+
+</script>
+
+</body>
+</html>

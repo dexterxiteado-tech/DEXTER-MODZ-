@@ -1,0 +1,132 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Store</title>
+
+<style>
+body{
+    background:black;
+    color:#22c55e;
+    font-family:monospace;
+    margin:0;
+    padding:10px;
+}
+
+/* CONTENEDOR */
+.container{
+    max-width:900px;
+    margin:auto;
+}
+
+/* CARD */
+.card{
+    display:flex;
+    gap:12px;
+    border:1px solid #22c55e;
+    padding:12px;
+    margin-bottom:12px;
+    border-radius:12px;
+    align-items:center;
+    transition:0.3s;
+}
+
+/* HOVER */
+.card:hover{
+    box-shadow:0 0 10px #22c55e;
+}
+
+/* IMAGEN */
+.card img{
+    width:90px;
+    height:120px;
+    object-fit:cover;
+    border-radius:8px;
+}
+
+/* INFO */
+.info{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+}
+
+/* TEXTO */
+.info h2{
+    margin:0;
+    font-size:16px;
+}
+
+.info p{
+    margin:0;
+    font-size:13px;
+}
+
+/* PRECIO */
+.price{
+    font-size:15px;
+    font-weight:bold;
+}
+
+/* BOTÓN */
+.btn{
+    margin-top:6px;
+    padding:10px;
+    font-size:14px;
+    border:none;
+    border-radius:6px;
+    background:#22c55e;
+    color:black;
+    font-weight:bold;
+}
+
+/* 📱 MODO TELÉFONO */
+@media(max-width:600px){
+    .card{
+        flex-direction:column;
+        align-items:flex-start;
+    }
+
+    .card img{
+        width:100%;
+        height:auto;
+    }
+
+    .btn{
+        width:100%;
+        text-align:center;
+    }
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+{% for p in productos %}
+<div class="card">
+
+    {% if p.imagen %}
+    <img src="{{ p.imagen }}">
+    {% endif %}
+
+    <div class="info">
+        <h2>{{ p.nombre }}</h2>
+        <p>{{ p.descripcion }}</p>
+        <p class="price">💲 {{ p.precio }}</p>
+
+        <a href="{{ p.link }}" target="_blank">
+            <button class="btn">💳 Comprar</button>
+        </a>
+    </div>
+
+</div>
+{% endfor %}
+
+</div>
+
+</body>
+</html>

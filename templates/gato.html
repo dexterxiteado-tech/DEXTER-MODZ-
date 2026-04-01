@@ -1,0 +1,180 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gato vs IA</title>
+
+<style>
+body{
+    background:#020617;
+    color:#00ff88;
+    font-family: monospace;
+    text-align:center;
+}
+
+/* marcador */
+#score{
+    margin:10px;
+    font-size:18px;
+}
+
+/* tablero */
+.board{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:10px;
+    width:90vw;
+    max-width:400px;
+    margin:auto;
+}
+
+.cell{
+    aspect-ratio:1;
+    border:2px solid #00ff88;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:8vw;
+    cursor:pointer;
+}
+
+/* botón */
+button{
+    margin-top:15px;
+    padding:10px;
+    background:black;
+    color:#00ff88;
+    border:1px solid #00ff88;
+}
+</style>
+</head>
+
+<body>
+
+<h2>🐱 Gato vs IA 🤖</h2>
+<p>Tú eres X | IA es O</p>
+
+<div id="score">
+🧑 Tú: <span id="playerWins">0</span> | 🤖 IA: <span id="aiWins">0</span>
+</div>
+
+<div class="board" id="board"></div>
+
+<button onclick="resetGame()">🔄 Reiniciar</button>
+
+<script>
+let board = ["","","","","","","","",""];
+let gameActive = true;
+
+/* marcador */
+let playerWins = localStorage.getItem("playerWins") || 0;
+let aiWins = localStorage.getItem("aiWins") || 0;
+
+document.getElementById("playerWins").textContent = playerWins;
+document.getElementById("aiWins").textContent = aiWins;
+
+const boardElement = document.getElementById("board");
+
+/* crear celdas */
+for(let i=0;i<9;i++){
+    let cell = document.createElement("div");
+    cell.classList.add("cell");
+    cell.dataset.index = i;
+
+    cell.addEventListener("click", () => playerMove(i));
+
+    boardElement.appendChild(cell);
+}
+
+/* movimiento jugador */
+function playerMove(index){
+    if(board[index] !== "" || !gameActive) return;
+
+    board[index] = "X";
+    render();
+
+    if(checkWinner("X")){
+        updateScore("X");
+        gameActive = false;
+        alert("Ganaste 😈");
+        return;
+    }
+
+    if(board.every(c => c !== "")){
+        gameActive = false;
+        alert("Empate 🤝");
+        return;
+    }
+
+    setTimeout(aiMove, 300);
+}
+
+/* IA básica */
+function aiMove(){
+    let empty = board
+        .map((v,i) => v === "" ? i : null)
+        .filter(v => v !== null);
+
+    let move = empty[Math.floor(Math.random() * empty.length)];
+    board[move] = "O";
+
+    render();
+
+    if(checkWinner("O")){
+        updateScore("O");
+        gameActive = false;
+        alert("Perdiste 🤖");
+        return;
+    }
+
+    if(board.every(c => c !== "")){
+        gameActive = false;
+        alert("Empate 🤝");
+    }
+}
+
+/* render */
+function render(){
+    document.querySelectorAll(".cell").forEach((cell,i)=>{
+        cell.textContent = board[i];
+    });
+}
+
+/* verificar ganador */
+function checkWinner(player){
+    const combos = [
+        [0,1,2],[3,4,5],[6,7,8],
+        [0,3,6],[1,4,7],[2,5,8],
+        [0,4,8],[2,4,6]
+    ];
+
+    return combos.some(combo =>
+        combo.every(i => board[i] === player)
+    );
+}
+
+/* actualizar marcador */
+function updateScore(winner){
+    if(winner === "X"){
+        playerWins++;
+        localStorage.setItem("playerWins", playerWins);
+        document.getElementById("playerWins").textContent = playerWins;
+    } else {
+        aiWins++;
+        localStorage.setItem("aiWins", aiWins);
+        document.getElementById("aiWins").textContent = aiWins;
+    }
+}
+
+/* reiniciar */
+function resetGame(){
+    board = ["","","","","","","","",""];
+    gameActive = true;
+    render();
+}
+</script>
+
+</body>
+</html>

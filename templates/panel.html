@@ -1,0 +1,161 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Panel</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600&display=swap" rel="stylesheet">
+
+<style>
+body{
+margin:0;
+font-family:monospace;
+color:#22c55e;
+overflow-x:hidden;
+background:black;
+}
+
+/* 🌌 GALAXIA */
+#galaxy{
+position:fixed;
+top:0;
+left:0;
+width:100%;
+height:100%;
+z-index:-1;
+background:#020617;
+overflow:hidden;
+}
+
+.star{
+position:absolute;
+width:2px;
+height:2px;
+background:white;
+border-radius:50%;
+opacity:0.8;
+animation:fall linear infinite;
+}
+
+@keyframes fall{
+from{ transform:translateY(-10px); }
+to{ transform:translateY(100vh); }
+}
+
+/* 🔝 NAVBAR */
+.topbar{
+position:fixed;
+top:0;
+width:100%;
+height:60px;
+background:#000;
+display:flex;
+justify-content:space-between;
+align-items:center;
+padding:0 10px;
+border-bottom:1px solid #22c55e;
+z-index:1000;
+box-sizing:border-box;
+}
+
+.logo{
+font-family:'Orbitron',sans-serif;
+color:#22c55e;
+font-size:15px;
+letter-spacing:2px;
+text-shadow:0 0 10px #22c55e;
+
+white-space:nowrap;
+overflow:hidden;
+text-overflow:ellipsis;
+max-width:65%;
+}
+
+.logout{
+color:red;
+font-weight:bold;
+text-decoration:none;
+white-space:nowrap;
+flex-shrink:0;
+}
+
+/* 📱 móvil */
+@media(max-width:400px){
+.logo{ font-size:13px; }
+.logout{ font-size:13px; }
+}
+
+/* 🧱 CONTENIDO */
+.main{
+padding:80px 20px 20px;
+}
+
+/* 🟩 CARDS */
+.card{
+background:#000;
+border:1px solid #22c55e;
+padding:20px;
+margin-top:15px;
+cursor:pointer;
+text-align:center;
+border-radius:12px;
+transition:0.3s;
+font-size:16px;
+box-shadow:0 0 10px #22c55e33;
+}
+
+.card:hover{
+background:#111;
+transform:scale(1.05);
+box-shadow:0 0 20px #22c55e;
+}
+</style>
+</head>
+
+<body>
+
+<!-- 🌌 GALAXIA -->
+<div id="galaxy"></div>
+
+<!-- 🔝 NAVBAR -->
+<div class="topbar">
+  <div class="logo">DEXTER MODZ SK</div>
+  <a href="/logout" class="logout">🚪 EXIT</a>
+</div>
+
+<!-- 🧱 CONTENIDO -->
+<div class="main">
+
+<h1></h1>𝘿𝙄𝘼𝙇𝙊𝙂 𝘾𝘼𝙍𝘿 𝙈𝙀𝙉𝙐</h1>
+
+<div class="card" onclick="location.href='/posts'">📂 FILES</div>
+<div class="card" onclick="location.href='/store'">🛒 STORE</div>
+<div class="card" onclick="location.href='/downloader'">🤖 DOWNLOADER</div>
+
+<!-- 🔥 BOTÓN WHATSAPP -->
+<div class="card" onclick="window.location.href='https://whatsapp.com/channel/0029VbCAFtZGZNCxxwARZ81f'">
+🍀 CHANNEL OF WHATSAPP
+</div>
+
+<div class="card" onclick="location.href='/gato'">🎮 GAME</div>
+
+</div>
+
+<!-- 🌌 SCRIPT GALAXIA -->
+<script>
+const g = document.getElementById("galaxy");
+
+for(let i=0;i<150;i++){
+let s=document.createElement("div");
+s.className="star";
+s.style.left=Math.random()*100+"vw";
+s.style.animationDuration=(Math.random()*10+5)+"s";
+s.style.opacity=Math.random();
+g.appendChild(s);
+}
+</script>
+
+</body>
+</html>

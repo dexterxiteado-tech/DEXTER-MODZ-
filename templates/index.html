@@ -1,0 +1,177 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login</title>
+
+<style>
+
+body{
+margin:0;
+height:100vh;
+display:flex;
+justify-content:center;
+align-items:center;
+background:linear-gradient(135deg,#020617,#0f172a);
+font-family:Arial;
+color:white;
+overflow:hidden;
+}
+
+/* 🌌 FONDO ANIMADO */
+body::before{
+content:"";
+position:absolute;
+width:200%;
+height:200%;
+background:radial-gradient(circle,#22c55e33 1px, transparent 1px);
+background-size:40px 40px;
+animation:move 10s linear infinite;
+}
+
+@keyframes move{
+0%{transform:translate(0,0);}
+100%{transform:translate(-40px,-40px);}
+}
+
+/* 📦 CARD */
+.login-box{
+position:relative;
+background:#020617;
+padding:40px;
+border-radius:15px;
+width:320px;
+max-width:95%; /* 🔥 evita desbordes en móvil */
+box-shadow:0 0 20px #22c55e55;
+text-align:center;
+z-index:1;
+}
+
+/* 🧠 TITULO */
+h2{
+margin-bottom:25px;
+color:#22c55e;
+}
+
+/* INPUTS */
+input{
+width:100%;
+padding:12px;
+margin:10px 0;
+border:none;
+border-radius:8px;
+background:#0f172a;
+color:white;
+outline:none;
+font-size:14px;
+box-sizing:border-box; /* 🔥 evita overflow */
+}
+
+input:focus{
+box-shadow:0 0 10px #22c55e;
+}
+
+/* BOTÓN */
+button{
+width:100%;
+padding:12px;
+margin-top:15px;
+border:none;
+border-radius:8px;
+background:#22c55e;
+color:black;
+font-weight:bold;
+cursor:pointer;
+transition:0.3s;
+}
+
+button:hover{
+background:#16a34a;
+transform:scale(1.05);
+}
+
+/* FOOTER */
+.footer{
+margin-top:15px;
+font-size:12px;
+color:#aaa;
+}
+
+/* 📱 AJUSTE SOLO PARA MÓVIL */
+@media (max-width: 600px){
+
+.login-box{
+width:90%;
+padding:25px;
+}
+
+h2{
+font-size:20px;
+}
+
+input{
+padding:10px;
+font-size:13px;
+}
+
+button{
+padding:10px;
+font-size:14px;
+}
+
+.footer{
+font-size:11px;
+}
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="login-box">
+
+<h2>🔐 Acceso</h2>
+
+<form method="POST">
+
+<input type="text" name="user" placeholder="Usuario" required>
+
+<input type="password" name="pass" placeholder="Contraseña" required>
+
+<input type="text" name="key" placeholder="Clave 🔐" required>
+
+<button type="submit">Entrar</button>
+
+</form>
+
+<div class="footer">
+Sistema seguro 🚀
+</div>
+
+</div>
+
+<!-- 🔊 AUDIO -->
+<audio id="music" autoplay loop muted playsinline>
+  <source src="{{ url_for('static', filename='audio/calle24.mp3') }}">
+</audio>
+
+<script>
+const music = document.getElementById("music");
+
+function activarAudio(){
+  music.muted = false;
+  music.play().catch(() => {});
+}
+
+// Activar audio con interacción
+document.addEventListener("click", activarAudio);
+document.addEventListener("touchstart", activarAudio);
+</script>
+
+</body>
+</html>

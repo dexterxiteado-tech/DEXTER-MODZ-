@@ -1,4 +1,3 @@
-
 from flask import Flask, render_template, request, redirect, session, jsonify
 import os, json, aiohttp, asyncio, random, string, io, time, threading, gc
 from datetime import timedelta
@@ -19,11 +18,11 @@ KEYS_FILE = "keys.json"
 STORE_FILE = "store.json"
 
 TOKEN = os.environ.get("BOT_TOKEN")
-PUBLIC_URL = os.environ.get("PUBLIC_URL", "https://dexter-modz-production.up.railway.app")
+PUBLIC_URL = os.environ.get("PUBLIC_URL")
 ADMIN_ID = 2122510061
 START_TIME = time.time()
 
-# ================= CACHE =================
+# ================= CACHE PARA MEMORIA =================
 _cache_timestamp = {}
 _cache_data = {}
 
@@ -67,7 +66,7 @@ def get_video_id(url):
 # ================= LIMPIEZA MEMORIA =================
 def cleanup_memory():
     gc.collect()
-    print(f"🧹 Cleanup - {time.strftime('%H:%M:%S')}")
+    print(f"🧹 RAM liberada - {time.strftime('%H:%M:%S')}")
 
 def schedule_cleanup():
     cleanup_memory()
@@ -138,9 +137,9 @@ def memoria_status():
         import psutil
         proceso = psutil.Process()
         memoria_mb = proceso.memory_info().rss / 1024 / 1024
-        return f"<h1>Memoria: {memoria_mb:.2f} MB</h1><a href='/panel'>Volver</a>"
+        return f"<h1>📊 Memoria: {memoria_mb:.2f} MB</h1><a href='/panel'>Volver</a>"
     except:
-        return "Instala psutil"
+        return "Instala psutil: pip install psutil"
 
 @app.route("/health")
 def health():
@@ -153,7 +152,11 @@ def bot_post():
     posts = load_posts()
     vid = get_video_id(data.get("youtube"))
     thumb = f"https://img.youtube.com/vi/{vid}/0.jpg" if vid else None
-    posts.append({"youtube": data.get("youtube"), "file": data.get("file"), "thumbnail": thumb})
+    posts.append({
+        "youtube": data.get("youtube"),
+        "file": data.get("file"),
+        "thumbnail": thumb
+    })
     save_posts(posts)
     return jsonify({"ok": True})
 
@@ -163,19 +166,30 @@ def is_admin(update):
 
 async def start_cmd(update, ctx):
     if not is_admin(update): return
-    await update.message.reply_text("🤖 BOT ACTIVO\n/yt /list /delete /clear\n/addstore /liststore /delstore\n/stats /ping /uptime\n/genkey /delkeysall")
+    await update.message.reply_text("""
+🤖 BOT ACTIVO
+
+📌 COMANDOS:
+/yt /list /delete /clear
+/addstore /liststore /delstore
+/stats /ping /uptime
+/genkey /delkeysall
+""")
 
 async def yt(update, ctx):
     if not is_admin(update) or len(ctx.args) < 2:
         return
     async with aiohttp.ClientSession() as s:
-        await s.post(f"{PUBLIC_URL}/bot/post", json={"youtube": ctx.args[0], "file": ctx.args[1]})
+        await s.post(PUBLIC_URL + "/bot/post", json={
+            "youtube": ctx.args[0],
+            "file": ctx.args[1]
+        })
     await update.message.reply_text("✅ Publicado")
 
 async def list_cmd(update, ctx):
     if not is_admin(update): return
     posts = load_posts()
-    txt = "\n".join([f"{i} - {p['youtube']}" for i, p in enumerate(posts)]) or "Sin posts"
+    txt = "\n".join([f"{i} - {p['youtube']}" for i,p in enumerate(posts)]) or "Sin posts"
     await update.message.reply_text(txt)
 
 async def delete_cmd(update, ctx):
@@ -198,7 +212,13 @@ async def addstore(update, ctx):
     try:
         nombre, precio, desc, link = " ".join(ctx.args).split("|")
         data = load_store()
-        data.append({"nombre": nombre.strip(), "precio": precio.strip(), "descripcion": desc.strip(), "link": link.strip(), "imagen": None})
+        data.append({
+            "nombre": nombre.strip(),
+            "precio": precio.strip(),
+            "descripcion": desc.strip(),
+            "link": link.strip(),
+            "imagen": None
+        })
         save_store(data)
         await update.message.reply_text("Producto creado, manda imagen")
     except:
@@ -210,7 +230,7 @@ async def liststore(update, ctx):
     if not data:
         await update.message.reply_text("No hay productos")
         return
-    txt = "🛒 PRODUCTOS:\n" + "\n".join([f"{i} - {p['nombre']} | ${p['precio']}" for i, p in enumerate(data)])
+    txt = "🛒 PRODUCTOS:\n\n" + "\n".join([f"{i} - {p['nombre']} | ${p['precio']}" for i, p in enumerate(data)])
     await update.message.reply_text(txt)
 
 async def delstore(update, ctx):
@@ -263,7 +283,8 @@ async def delkeys(update, ctx):
     save_keys([])
     await update.message.reply_text("Keys eliminadas")
 
-# ================= INICIAR BOT CON POLLING =================
+# ================= INICIAR BOT (POLLING - SIN WEBHOOK) =================
+print("🤖 Iniciando bot en modo POLLING...")
 bot = ApplicationBuilder().token(TOKEN).build()
 
 bot.add_handler(CommandHandler("start", start_cmd))
@@ -281,9 +302,9 @@ bot.add_handler(CommandHandler("genkey", genkey))
 bot.add_handler(CommandHandler("delkeysall", delkeys))
 bot.add_handler(MessageHandler(filters.PHOTO, foto))
 
-# Iniciar el bot en un hilo separado (POLLING)
+# Ejecutar bot en hilo separado
 def run_bot():
-    print("🤖 Bot iniciando en modo POLLING...")
+    print("✅ Bot iniciado correctamente. Esperando comandos...")
     bot.run_polling()
 
 bot_thread = threading.Thread(target=run_bot, daemon=True)

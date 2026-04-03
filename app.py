@@ -1,6 +1,5 @@
-
 from flask import Flask, render_template, request, redirect, session, jsonify
-import os, json, aiohttp, asyncio, random, string, io, time
+import os, json, aiohttp, asyncio, random, string, io, time, gc, threading
 from datetime import timedelta
 
 from telegram import Update, InputFile
@@ -29,33 +28,43 @@ API_URL = PUBLIC_URL + "/bot/post"
 
 START_TIME = time.time()
 
-# ================= SEGURIDAD =================
-@app.before_request
-def proteger():
-    libres = ["/", "/bot/post", "/webhook", "/logout", "/gato", "/downloader"]
+# ================= LIMPIEZA AUTOMÁTICA DE MEMORIA =================
+def limpiar_memoria():
+    gc.collect()
+    print(f"🧹 RAM liberada - {time.strftime('%H:%M:%S')}")
 
-    if request.path.startswith("/static"):
-        return
+def programa_limpieza():
+    limpiar_memoria()
+    threading.Timer(300.0, programa_limpieza).start()  # Cada 5 minutos
 
-    if request.path in libres:
-        return
+programa_limpieza()
 
-    if not session.get("login"):
-        return redirect("/")
+# ================= JSON CON CACHÉ =================
+_cache = {}
+_cache_time = {}
 
-    # 🔥 mantiene sesión activa si navega
-    session.modified = True
-
-# ================= JSON =================
 def load_json(file):
+    now = time.time()
+    # Si el archivo está en caché y es reciente (< 5 segundos)
+    if file in _cache and (now - _cache_time.get(file, 0)) < 5:
+        return _cache[file]
+    
     if not os.path.exists(file):
-        return []
-    with open(file) as f:
-        return json.load(f)
+        data = []
+    else:
+        with open(file) as f:
+            data = json.load(f)
+    
+    _cache[file] = data
+    _cache_time[file] = now
+    return data
 
 def save_json(file, data):
     with open(file, "w") as f:
         json.dump(data, f, indent=4)
+    # Actualizar caché
+    _cache[file] = data
+    _cache_time[file] = time.time()
 
 def load_posts(): return load_json(DB_FILE)
 def save_posts(d): save_json(DB_FILE, d)
@@ -76,6 +85,22 @@ def get_video_id(url):
         return url.split("youtu.be/")[1].split("?")[0]
     return None
 
+# ================= SEGURIDAD =================
+@app.before_request
+def proteger():
+    libres = ["/", "/bot/post", "/webhook", "/logout", "/gato", "/downloader"]
+
+    if request.path.startswith("/static"):
+        return
+
+    if request.path in libres:
+        return
+
+    if not session.get("login"):
+        return redirect("/")
+
+    session.modified = True
+
 # ================= LOGIN =================
 @app.route("/", methods=["GET", "POST"])
 def login():
@@ -88,13 +113,11 @@ def login():
 
         if user == USUARIO and password == PASSWORD:
 
-            # 🔥 MASTER KEY
             if key == MASTER_KEY:
                 session.permanent = True
                 session["login"] = True
                 return redirect("/panel")
 
-            # 🔥 KEY NORMAL
             if key in keys:
                 keys.remove(key)
                 save_keys(keys)
@@ -302,7 +325,7 @@ async def delkeys(update, ctx):
     save_keys([])
     await update.message.reply_text("Keys eliminadas")
 
-# ================= INIT =================
+# ================= INICIAR BOT (CORREGIDO - SIN FUGA DE MEMORIA) =================
 bot = ApplicationBuilder().token(TOKEN).build()
 
 bot.add_handler(CommandHandler("start", start_cmd))
@@ -324,18 +347,43 @@ bot.add_handler(CommandHandler("delkeysall", delkeys))
 
 bot.add_handler(MessageHandler(filters.PHOTO, foto))
 
-async def init():
-    await bot.initialize()
-    await bot.start()
+# Iniciar el bot correctamente (sin loop permanente que fuga memoria)
+_bot_loop = asyncio.new_event_loop()
+asyncio.set_event_loop(_bot_loop)
+_bot_loop.run_until_complete(bot.initialize())
+_bot_loop.run_until_complete(bot.start())
 
-asyncio.get_event_loop().run_until_complete(init())
+print("✅ Bot de Telegram iniciado correctamente")
 
+# ================= WEBHOOK CORREGIDO (SIN CREAR NUEVOS LOOPS) =================
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    update = Update.de_json(request.get_json(force=True), bot.bot)
-    asyncio.run(bot.process_update(update))
-    return "ok"
+    try:
+        update_data = request.get_json(force=True)
+        if not update_data:
+            return "No data", 400
+        
+        update = Update.de_json(update_data, bot.bot)
+        # Usar el loop existente, NO crear uno nuevo (esto causaba la fuga de RAM)
+        asyncio.run_coroutine_threadsafe(bot.process_update(update), _bot_loop)
+        return "ok", 200
+    except Exception as e:
+        print(f"Error en webhook: {e}")
+        return f"Error: {e}", 500
 
-# ================= RUN =================
+# ================= MONITOREO DE SALUD (OPCIONAL) =================
+@app.route("/health")
+def health():
+    return jsonify({
+        "status": "ok",
+        "uptime": int(time.time() - START_TIME),
+        "posts": len(load_posts()),
+        "keys": len(load_keys()),
+        "products": len(load_store())
+    })
+
+# ================= EJECUCIÓN =================
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
+    port = int(os.environ.get("PORT", 8080))
+    print(f"🚀 Web iniciada en puerto {port}")
+    app.run(host="0.0.0.0", port=port, threaded=True)

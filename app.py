@@ -23,7 +23,7 @@ STORE_FILE = "store.json"
 TOKEN = os.environ.get("BOT_TOKEN")
 PUBLIC_URL = os.environ.get("PUBLIC_URL")
 
-ADMIN_ID = 7285341815
+ADMIN_ID = 6841201622
 API_URL = PUBLIC_URL.rstrip("/") + "/bot/post"
 
 START_TIME = time.time()

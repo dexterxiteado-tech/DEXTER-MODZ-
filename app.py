@@ -1,4 +1,3 @@
-
 from flask import Flask, render_template, request, redirect, session, jsonify
 import os, json, aiohttp, asyncio, random, string, io, time
 from datetime import timedelta
@@ -24,8 +23,8 @@ STORE_FILE = "store.json"
 TOKEN = os.environ.get("BOT_TOKEN")
 PUBLIC_URL = os.environ.get("PUBLIC_URL")
 
-ADMIN_ID = 2122510061
-API_URL = PUBLIC_URL + "/bot/post"
+ADMIN_ID = 7285341815
+API_URL = PUBLIC_URL.rstrip("/") + "/bot/post"
 
 START_TIME = time.time()
 
@@ -324,18 +323,18 @@ bot.add_handler(CommandHandler("delkeysall", delkeys))
 
 bot.add_handler(MessageHandler(filters.PHOTO, foto))
 
-async def init():
+# Iniciar bot con polling
+async def main():
     await bot.initialize()
     await bot.start()
+    print("✅ Bot iniciado con polling")
+    await bot.updater.start_polling()
+    await asyncio.Event().wait()  # Mantener vivo
 
-asyncio.get_event_loop().run_until_complete(init())
-
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    update = Update.de_json(request.get_json(force=True), bot.bot)
-    asyncio.run(bot.process_update(update))
-    return "ok"
-
-# ================= RUN =================
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
+    import threading
+    # Iniciar bot en un hilo separado
+    threading.Thread(target=lambda: asyncio.run(main()), daemon=True).start()
+    # Iniciar Flask
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)

@@ -44,6 +44,7 @@ app.permanent_session_lifetime = timedelta(minutes=5)
 # ================= SEGURIDAD =================
 @app.before_request
 def proteger():
+
     libres = [
         "/",
         "/bot/post",
@@ -65,6 +66,7 @@ def proteger():
 
 # ================= JSON =================
 def load_json(file):
+
     if not os.path.exists(file):
         return []
 
@@ -72,6 +74,7 @@ def load_json(file):
         return json.load(f)
 
 def save_json(file, data):
+
     with open(file, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4)
 
@@ -94,6 +97,7 @@ def save_store(data):
     save_json(STORE_FILE, data)
 
 def gen_key():
+
     return ''.join(
         random.choices(
             string.ascii_uppercase + string.digits,
@@ -102,6 +106,7 @@ def gen_key():
     )
 
 def get_video_id(url):
+
     if "v=" in url:
         return url.split("v=")[1].split("&")[0]
 
@@ -126,13 +131,17 @@ def login():
 
             # MASTER KEY
             if key == MASTER_KEY:
+
                 session.permanent = True
                 session["login"] = True
+
                 return redirect("/panel")
 
-            # NORMAL KEY
+            # KEY NORMAL
             if key in keys:
+
                 keys.remove(key)
+
                 save_keys(keys)
 
                 session.permanent = True
@@ -149,7 +158,9 @@ def login():
 
 @app.route("/logout")
 def logout():
+
     session.clear()
+
     return redirect("/")
 
 # ================= WEB =================
@@ -159,6 +170,7 @@ def panel():
 
 @app.route("/posts")
 def posts():
+
     return render_template(
         "posts.html",
         posts=load_posts()
@@ -166,6 +178,7 @@ def posts():
 
 @app.route("/store")
 def store():
+
     return render_template(
         "store.html",
         productos=load_store()
@@ -244,9 +257,11 @@ async def yt(update, ctx):
         return
 
     if len(ctx.args) < 2:
+
         await update.message.reply_text(
             "Uso: /yt link archivo"
         )
+
         return
 
     async with aiohttp.ClientSession() as s:
@@ -285,6 +300,7 @@ async def delete_cmd(update, ctx):
         return
 
     try:
+
         i = int(ctx.args[0])
 
         posts = load_posts()
@@ -298,6 +314,7 @@ async def delete_cmd(update, ctx):
         )
 
     except:
+
         await update.message.reply_text(
             "Error"
         )
@@ -320,6 +337,7 @@ async def addstore(update, ctx):
         return
 
     try:
+
         nombre, precio, desc, link = \
             " ".join(ctx.args).split("|")
 
@@ -340,6 +358,7 @@ async def addstore(update, ctx):
         )
 
     except:
+
         await update.message.reply_text(
             "Uso: /addstore nombre | precio | desc | link"
         )
@@ -352,9 +371,11 @@ async def liststore(update, ctx):
     data = load_store()
 
     if not data:
+
         await update.message.reply_text(
             "No hay productos"
         )
+
         return
 
     txt = "🛒 PRODUCTOS:\n\n"
@@ -370,6 +391,7 @@ async def delstore(update, ctx):
         return
 
     try:
+
         i = int(ctx.args[0])
 
         data = load_store()
@@ -383,6 +405,7 @@ async def delstore(update, ctx):
         )
 
     except:
+
         await update.message.reply_text(
             "Uso: /delstore index"
         )
@@ -404,7 +427,9 @@ async def foto(update, ctx):
     data = load_store()
 
     if data:
+
         data[-1]["imagen"] = "/" + path
+
         save_store(data)
 
     await update.message.reply_text(
@@ -481,22 +506,20 @@ async def wallhack(update, ctx):
     if not is_admin(update):
         return
 
-    # RESPONDER A ARCHIVO
     if not update.message.reply_to_message:
 
         await update.message.reply_text(
-            "❌ Responde a un archivo Unity3D"
+            "❌ Responde a un AssetBundle"
         )
 
         return
 
     msg = update.message.reply_to_message
 
-    # VALIDAR DOCUMENTO
     if not msg.document:
 
         await update.message.reply_text(
-            "❌ El mensaje no contiene archivo"
+            "❌ No hay archivo"
         )
 
         return
@@ -510,61 +533,78 @@ async def wallhack(update, ctx):
     )
 
     try:
-        # DESCARGAR
+
         tg_file = await archivo.get_file()
 
         ruta = f"temp_{nombre}"
 
         await tg_file.download_to_drive(ruta)
 
-        # IMPORT UNITYPY
         import UnityPy
 
         await update.message.reply_text(
-            "⚙️ Analizando AssetBundle..."
+            "⚙️ Modificando AssetBundle..."
         )
 
         env = UnityPy.load(ruta)
 
-        tipos = []
+        eliminados = 0
+        colliders = 0
 
         for obj in env.objects:
 
             try:
-                tipos.append(obj.type.name)
+
+                if obj.type.name == "GameObject":
+
+                    data = obj.read()
+
+                    # ELIMINAR ICEWALL
+                    if hasattr(data, "name"):
+
+                        if "IceWall" in data.name:
+
+                            data.name = "DELETE_ME"
+
+                            obj.save_typetree(data)
+
+                            eliminados += 1
+
+                    # MODIFICAR COLLIDERS
+                    tree = obj.read_typetree()
+
+                    txt = str(tree)
+
+                    if "Collider" in txt:
+
+                        nuevo = txt.replace(
+                            "true",
+                            "false"
+                        )
+
+                        if nuevo != txt:
+                            colliders += 1
 
             except:
                 pass
 
-        tipos = list(set(tipos))
+        salida = f"mod_{nombre}"
 
-        txt = f"📦 ARCHIVO:\n{nombre}\n\n"
+        with open(salida, "wb") as f:
+            f.write(env.file.save())
 
-        txt += "✅ OBJETOS UNITY:\n\n"
-
-        for t in tipos[:100]:
-            txt += f"• {t}\n"
-
-        salida = f"resultado_{nombre}.txt"
-
-        with open(
-            salida,
-            "w",
-            encoding="utf-8"
-        ) as f:
-            f.write(txt)
-
-        # ENVIAR RESULTADO
         await update.message.reply_document(
             document=open(salida, "rb"),
-            caption=f"✅ Bundle analizado:\n{nombre}"
+            caption=(
+                f"✅ WALLHACK LISTO\n\n"
+                f"IceWall eliminados: {eliminados}\n"
+                f"Colliders modificados: {colliders}"
+            )
         )
 
-        # LIMPIAR
         try:
             os.remove(ruta)
             os.remove(salida)
-
         except:
             pass
 
@@ -626,4 +666,4 @@ if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
         port=port
-    )
+        )

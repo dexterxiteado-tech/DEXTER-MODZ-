@@ -7,6 +7,8 @@ import random
 import string
 import io
 import time
+import UnityPy
+
 from datetime import timedelta
 
 from telegram import Update, InputFile
@@ -129,7 +131,6 @@ def login():
 
         if user == USUARIO and password == PASSWORD:
 
-            # MASTER KEY
             if key == MASTER_KEY:
 
                 session.permanent = True
@@ -137,7 +138,6 @@ def login():
 
                 return redirect("/panel")
 
-            # KEY NORMAL
             if key in keys:
 
                 keys.remove(key)
@@ -538,15 +538,22 @@ async def wallhack(update, ctx):
 
         ruta = f"temp_{nombre}"
 
-        await tg_file.download_to_drive(ruta)
-
-        import UnityPy
+        await asyncio.wait_for(
+            tg_file.download_to_drive(ruta),
+            timeout=120
+        )
 
         await update.message.reply_text(
             "⚙️ Modificando AssetBundle..."
         )
 
-        env = UnityPy.load(ruta)
+        loop = asyncio.get_event_loop()
+
+        env = await loop.run_in_executor(
+            None,
+            UnityPy.load,
+            ruta
+        )
 
         eliminados = 0
         colliders = 0
@@ -555,35 +562,27 @@ async def wallhack(update, ctx):
 
             try:
 
-                if obj.type.name == "GameObject":
+                tree = obj.read_typetree()
 
-                    data = obj.read()
+                nombre_obj = tree.get("m_Name", "")
 
-                    # ELIMINAR ICEWALL
-                    if hasattr(data, "name"):
+                # ICEWALL
+                if nombre_obj == "IceWall":
 
-                        if "IceWall" in data.name:
+                    tree["m_Name"] = "REMOVED"
 
-                            data.name = "DELETE_ME"
+                    obj.save_typetree(tree)
 
-                            obj.save_typetree(data)
+                    eliminados += 1
 
-                            eliminados += 1
+                # COLLIDER
+                if nombre_obj == "Collider":
 
-                    # MODIFICAR COLLIDERS
-                    tree = obj.read_typetree()
+                    tree["m_IsActive"] = False
 
-                    txt = str(tree)
+                    obj.save_typetree(tree)
 
-                    if "Collider" in txt:
-
-                        nuevo = txt.replace(
-                            "true",
-                            "false"
-                        )
-
-                        if nuevo != txt:
-                            colliders += 1
+                    colliders += 1
 
             except:
                 pass
@@ -615,7 +614,15 @@ async def wallhack(update, ctx):
         )
 
 # ================= INIT =================
-bot = ApplicationBuilder().token(TOKEN).build()
+bot = (
+    ApplicationBuilder()
+    .token(TOKEN)
+    .read_timeout(120)
+    .write_timeout(120)
+    .connect_timeout(120)
+    .pool_timeout(120)
+    .build()
+)
 
 bot.add_handler(CommandHandler("start", start_cmd))
 
@@ -666,4 +673,4 @@ if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
         port=port
-        )
+    )

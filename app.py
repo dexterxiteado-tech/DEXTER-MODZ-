@@ -330,111 +330,136 @@ async def clear(update, ctx):
         "Todo eliminado"
     )
 
-# ================= STORE =================
-async def addstore(update, ctx):
+# ================= WALLHACK JSON =================
+async def wallhack(update, ctx):
 
     if not is_admin(update):
         return
 
-    try:
-
-        nombre, precio, desc, link = \
-            " ".join(ctx.args).split("|")
-
-        data = load_store()
-
-        data.append({
-            "nombre": nombre.strip(),
-            "precio": precio.strip(),
-            "descripcion": desc.strip(),
-            "link": link.strip(),
-            "imagen": None
-        })
-
-        save_store(data)
+    if not update.message.reply_to_message:
 
         await update.message.reply_text(
-            "Producto creado, manda imagen"
-        )
-
-    except:
-
-        await update.message.reply_text(
-            "Uso: /addstore nombre | precio | desc | link"
-        )
-
-async def liststore(update, ctx):
-
-    if not is_admin(update):
-        return
-
-    data = load_store()
-
-    if not data:
-
-        await update.message.reply_text(
-            "No hay productos"
+            "❌ Responde a un AssetBundle"
         )
 
         return
 
-    txt = "🛒 PRODUCTOS:\n\n"
+    msg = update.message.reply_to_message
 
-    for i, p in enumerate(data):
-        txt += f"{i} - {p['nombre']} | ${p['precio']}\n"
-
-    await update.message.reply_text(txt)
-
-async def delstore(update, ctx):
-
-    if not is_admin(update):
-        return
-
-    try:
-
-        i = int(ctx.args[0])
-
-        data = load_store()
-
-        data.pop(i)
-
-        save_store(data)
+    if not msg.document:
 
         await update.message.reply_text(
-            "Producto eliminado"
+            "❌ No hay archivo"
         )
 
-    except:
-
-        await update.message.reply_text(
-            "Uso: /delstore index"
-        )
-
-async def foto(update, ctx):
-
-    if not is_admin(update):
         return
 
-    if not update.message.photo:
-        return
+    archivo = msg.document
 
-    file = await update.message.photo[-1].get_file()
-
-    path = f"static/store_{random.randint(1000,9999)}.jpg"
-
-    await file.download_to_drive(path)
-
-    data = load_store()
-
-    if data:
-
-        data[-1]["imagen"] = "/" + path
-
-        save_store(data)
+    nombre = archivo.file_name
 
     await update.message.reply_text(
-        "Imagen guardada"
+        f"🧱 Descargando:\n{nombre}"
     )
+
+    try:
+
+        # DESCARGAR
+        tg_file = await archivo.get_file()
+
+        ruta = f"temp_{nombre}"
+
+        await asyncio.wait_for(
+            tg_file.download_to_drive(ruta),
+            timeout=120
+        )
+
+        await update.message.reply_text(
+            "⚙️ Exportando JSON..."
+        )
+
+        # CARGAR UNITYPY
+        loop = asyncio.get_event_loop()
+
+        env = await loop.run_in_executor(
+            None,
+            UnityPy.load,
+            ruta
+        )
+
+        eliminados = 0
+        colliders = 0
+
+        # RECORRER OBJETOS
+        for obj in env.objects:
+
+            try:
+
+                tree = obj.read_typetree()
+
+                if not isinstance(tree, dict):
+                    continue
+
+                nombre_obj = str(
+                    tree.get("m_Name", "")
+                )
+
+                # ICEWALL
+                if nombre_obj == "IceWall":
+
+                    tree["m_Name"] = "REMOVED"
+
+                    obj.save_typetree(tree)
+
+                    eliminados += 1
+
+                # COLLIDER
+                if nombre_obj == "Collider":
+
+                    if "m_IsActive" in tree:
+
+                        tree["m_IsActive"] = False
+
+                        obj.save_typetree(tree)
+
+                        colliders += 1
+
+            except:
+                pass
+
+        await update.message.reply_text(
+            "💾 Rebuild AssetBundle..."
+        )
+
+        # GUARDAR
+        salida = f"mod_{nombre}"
+
+        with open(salida, "wb") as f:
+            f.write(env.file.save())
+
+        # ENVIAR
+        await update.message.reply_document(
+            document=open(salida, "rb"),
+            caption=(
+                f"✅ WALLHACK JSON LISTO\n\n"
+                f"IceWall modificados: {eliminados}\n"
+                f"Colliders modificados: {colliders}"
+            )
+        )
+
+        # LIMPIAR
+        try:
+            os.remove(ruta)
+            os.remove(salida)
+
+        except:
+            pass
+
+    except Exception as e:
+
+        await update.message.reply_text(
+            f"❌ Error:\n{e}"
+        )
 
 # ================= INFO =================
 async def stats(update, ctx):
@@ -500,119 +525,6 @@ async def delkeys(update, ctx):
         "Keys eliminadas"
     )
 
-# ================= WALLHACK =================
-async def wallhack(update, ctx):
-
-    if not is_admin(update):
-        return
-
-    if not update.message.reply_to_message:
-
-        await update.message.reply_text(
-            "❌ Responde a un AssetBundle"
-        )
-
-        return
-
-    msg = update.message.reply_to_message
-
-    if not msg.document:
-
-        await update.message.reply_text(
-            "❌ No hay archivo"
-        )
-
-        return
-
-    archivo = msg.document
-
-    nombre = archivo.file_name
-
-    await update.message.reply_text(
-        f"🧱 Descargando:\n{nombre}"
-    )
-
-    try:
-
-        tg_file = await archivo.get_file()
-
-        ruta = f"temp_{nombre}"
-
-        await asyncio.wait_for(
-            tg_file.download_to_drive(ruta),
-            timeout=120
-        )
-
-        await update.message.reply_text(
-            "⚙️ Modificando AssetBundle..."
-        )
-
-        loop = asyncio.get_event_loop()
-
-        env = await loop.run_in_executor(
-            None,
-            UnityPy.load,
-            ruta
-        )
-
-        eliminados = 0
-        colliders = 0
-
-        for obj in env.objects:
-
-            try:
-
-                tree = obj.read_typetree()
-
-                nombre_obj = tree.get("m_Name", "")
-
-                # ICEWALL
-                if nombre_obj == "IceWall":
-
-                    tree["m_Name"] = "REMOVED"
-
-                    obj.save_typetree(tree)
-
-                    eliminados += 1
-
-                # COLLIDER
-                if nombre_obj == "Collider":
-
-                    tree["m_IsActive"] = False
-
-                    obj.save_typetree(tree)
-
-                    colliders += 1
-
-            except:
-                pass
-
-        salida = f"mod_{nombre}"
-
-        with open(salida, "wb") as f:
-            f.write(env.file.save())
-
-        await update.message.reply_document(
-            document=open(salida, "rb"),
-            caption=(
-                f"✅ WALLHACK LISTO\n\n"
-                f"IceWall eliminados: {eliminados}\n"
-                f"Colliders modificados: {colliders}"
-            )
-        )
-
-        try:
-            os.remove(ruta)
-            os.remove(salida)
-        except:
-            pass
-
-    except Exception as e:
-
-        await update.message.reply_text(
-            f"❌ Error:\n{e}"
-        )
-
 # ================= INIT =================
 bot = (
     ApplicationBuilder()
@@ -631,10 +543,6 @@ bot.add_handler(CommandHandler("list", list_cmd))
 bot.add_handler(CommandHandler("delete", delete_cmd))
 bot.add_handler(CommandHandler("clear", clear))
 
-bot.add_handler(CommandHandler("addstore", addstore))
-bot.add_handler(CommandHandler("liststore", liststore))
-bot.add_handler(CommandHandler("delstore", delstore))
-
 bot.add_handler(CommandHandler("stats", stats))
 bot.add_handler(CommandHandler("ping", ping))
 bot.add_handler(CommandHandler("uptime", uptime))
@@ -643,8 +551,6 @@ bot.add_handler(CommandHandler("genkey", genkey))
 bot.add_handler(CommandHandler("delkeysall", delkeys))
 
 bot.add_handler(CommandHandler("wallhack", wallhack))
-
-bot.add_handler(MessageHandler(filters.PHOTO, foto))
 
 # ================= MAIN =================
 async def main():

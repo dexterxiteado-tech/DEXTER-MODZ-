@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, session, jsonify
-import os, json, aiohttp, asyncio, random, string, io, time
+import os, json, aiohttp, asyncio, random, string, io, time, subprocess
 from datetime import timedelta
 
 from telegram import Update, InputFile
@@ -42,7 +42,6 @@ def proteger():
     if not session.get("login"):
         return redirect("/")
 
-    # 🔥 mantiene sesión activa si navega
     session.modified = True
 
 # ================= JSON =================
@@ -87,13 +86,11 @@ def login():
 
         if user == USUARIO and password == PASSWORD:
 
-            # 🔥 MASTER KEY
             if key == MASTER_KEY:
                 session.permanent = True
                 session["login"] = True
                 return redirect("/panel")
 
-            # 🔥 KEY NORMAL
             if key in keys:
                 keys.remove(key)
                 save_keys(keys)
@@ -154,20 +151,36 @@ def is_admin(update):
     return update.effective_user.id == ADMIN_ID
 
 async def start_cmd(update: Update, ctx):
-    if not is_admin(update): return
+    if not is_admin(update):
+        return
+
     await update.message.reply_text("""
 🤖 BOT ACTIVO
 
 📌 COMANDOS:
-/yt /list /delete /clear
-/addstore /liststore /delstore
-/stats /ping /uptime
-/genkey /delkeysall
+/yt
+/list
+/delete
+/clear
+
+/addstore
+/liststore
+/delstore
+
+/stats
+/ping
+/uptime
+
+/genkey
+/delkeysall
+
+/wallhack
 """)
 
 # ================= POSTS =================
 async def yt(update, ctx):
-    if not is_admin(update): return
+    if not is_admin(update):
+        return
 
     if len(ctx.args) < 2:
         await update.message.reply_text("Uso: /yt link archivo")
@@ -182,34 +195,53 @@ async def yt(update, ctx):
     await update.message.reply_text("✅ Publicado")
 
 async def list_cmd(update, ctx):
-    if not is_admin(update): return
+    if not is_admin(update):
+        return
+
     posts = load_posts()
-    txt = "\n".join([f"{i} - {p['youtube']}" for i,p in enumerate(posts)])
+
+    txt = "\n".join([
+        f"{i} - {p['youtube']}"
+        for i, p in enumerate(posts)
+    ])
+
     await update.message.reply_text(txt or "Sin posts")
 
 async def delete_cmd(update, ctx):
-    if not is_admin(update): return
+    if not is_admin(update):
+        return
+
     try:
         i = int(ctx.args[0])
+
         posts = load_posts()
         posts.pop(i)
+
         save_posts(posts)
+
         await update.message.reply_text("Eliminado")
+
     except:
         await update.message.reply_text("Error")
 
 async def clear(update, ctx):
-    if not is_admin(update): return
+    if not is_admin(update):
+        return
+
     save_posts([])
+
     await update.message.reply_text("Todo eliminado")
 
 # ================= STORE =================
 async def addstore(update, ctx):
-    if not is_admin(update): return
+    if not is_admin(update):
+        return
+
     try:
         nombre, precio, desc, link = " ".join(ctx.args).split("|")
 
         data = load_store()
+
         data.append({
             "nombre": nombre.strip(),
             "precio": precio.strip(),
@@ -219,13 +251,19 @@ async def addstore(update, ctx):
         })
 
         save_store(data)
-        await update.message.reply_text("Producto creado, manda imagen")
+
+        await update.message.reply_text(
+            "Producto creado, manda imagen"
+        )
 
     except:
-        await update.message.reply_text("Uso: /addstore nombre | precio | desc | link")
+        await update.message.reply_text(
+            "Uso: /addstore nombre | precio | desc | link"
+        )
 
 async def liststore(update, ctx):
-    if not is_admin(update): return
+    if not is_admin(update):
+        return
 
     data = load_store()
 
@@ -234,31 +272,46 @@ async def liststore(update, ctx):
         return
 
     txt = "🛒 PRODUCTOS:\n\n"
+
     for i, p in enumerate(data):
         txt += f"{i} - {p['nombre']} | ${p['precio']}\n"
 
     await update.message.reply_text(txt)
 
 async def delstore(update, ctx):
-    if not is_admin(update): return
+    if not is_admin(update):
+        return
+
     try:
         i = int(ctx.args[0])
+
         data = load_store()
         data.pop(i)
+
         save_store(data)
+
         await update.message.reply_text("Producto eliminado")
+
     except:
-        await update.message.reply_text("Uso: /delstore index")
+        await update.message.reply_text(
+            "Uso: /delstore index"
+        )
 
 async def foto(update, ctx):
-    if not is_admin(update): return
-    if not update.message.photo: return
+    if not is_admin(update):
+        return
+
+    if not update.message.photo:
+        return
 
     file = await update.message.photo[-1].get_file()
+
     path = f"static/store_{random.randint(1000,9999)}.jpg"
+
     await file.download_to_drive(path)
 
     data = load_store()
+
     if data:
         data[-1]["imagen"] = "/" + path
         save_store(data)
@@ -267,44 +320,110 @@ async def foto(update, ctx):
 
 # ================= INFO =================
 async def stats(update, ctx):
-    if not is_admin(update): return
-    await update.message.reply_text(f"Posts: {len(load_posts())}")
+    if not is_admin(update):
+        return
+
+    await update.message.reply_text(
+        f"Posts: {len(load_posts())}"
+    )
 
 async def ping(update, ctx):
-    if not is_admin(update): return
+    if not is_admin(update):
+        return
+
     await update.message.reply_text("pong")
 
 async def uptime(update, ctx):
-    if not is_admin(update): return
+    if not is_admin(update):
+        return
+
     t = int(time.time() - START_TIME)
+
     await update.message.reply_text(f"{t}s activo")
 
 # ================= KEYS =================
 async def genkey(update, ctx):
-    if not is_admin(update): return
+    if not is_admin(update):
+        return
 
     n = int(ctx.args[0]) if ctx.args else 1
+
     keys = load_keys()
 
     nuevas = [gen_key() for _ in range(n)]
+
     keys.extend(nuevas)
+
     save_keys(keys)
 
     txt = "\n".join(nuevas)
+
     file = io.BytesIO(txt.encode())
     file.name = "keys.txt"
 
-    await update.message.reply_document(InputFile(file))
+    await update.message.reply_document(
+        InputFile(file)
+    )
 
 async def delkeys(update, ctx):
-    if not is_admin(update): return
+    if not is_admin(update):
+        return
+
     save_keys([])
-    await update.message.reply_text("Keys eliminadas")
+
+    await update.message.reply_text(
+        "Keys eliminadas"
+    )
+
+# ================= WALLHACK =================
+async def wallhack(update, ctx):
+    if not is_admin(update):
+        return
+
+    if not ctx.args:
+        await update.message.reply_text(
+            "Uso: /wallhack archivo.bundle"
+        )
+        return
+
+    archivo = ctx.args[0]
+
+    await update.message.reply_text(
+        f"🧱 Analizando bundle:\n{archivo}"
+    )
+
+    try:
+        import UnityPy
+
+        env = UnityPy.load(archivo)
+
+        tipos = []
+
+        for obj in env.objects:
+            try:
+                tipos.append(obj.type.name)
+            except:
+                pass
+
+        tipos = list(set(tipos))
+
+        txt = "✅ OBJETOS UNITY:\n\n"
+
+        for t in tipos[:50]:
+            txt += f"• {t}\n"
+
+        await update.message.reply_text(txt)
+
+    except Exception as e:
+        await update.message.reply_text(
+            f"❌ Error:\n{e}"
+        )
 
 # ================= INIT =================
 bot = ApplicationBuilder().token(TOKEN).build()
 
 bot.add_handler(CommandHandler("start", start_cmd))
+
 bot.add_handler(CommandHandler("yt", yt))
 bot.add_handler(CommandHandler("list", list_cmd))
 bot.add_handler(CommandHandler("delete", delete_cmd))
@@ -321,20 +440,32 @@ bot.add_handler(CommandHandler("uptime", uptime))
 bot.add_handler(CommandHandler("genkey", genkey))
 bot.add_handler(CommandHandler("delkeysall", delkeys))
 
+bot.add_handler(CommandHandler("wallhack", wallhack))
+
 bot.add_handler(MessageHandler(filters.PHOTO, foto))
 
-# Iniciar bot con polling
+# ================= MAIN =================
 async def main():
     await bot.initialize()
     await bot.start()
+
     print("✅ Bot iniciado con polling")
+
     await bot.updater.start_polling()
-    await asyncio.Event().wait()  # Mantener vivo
+
+    await asyncio.Event().wait()
 
 if __name__ == "__main__":
     import threading
-    # Iniciar bot en un hilo separado
-    threading.Thread(target=lambda: asyncio.run(main()), daemon=True).start()
-    # Iniciar Flask
+
+    threading.Thread(
+        target=lambda: asyncio.run(main()),
+        daemon=True
+    ).start()
+
     port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+
+    app.run(
+        host="0.0.0.0",
+        port=port
+                   )

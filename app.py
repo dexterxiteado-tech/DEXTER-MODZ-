@@ -1,5 +1,13 @@
 from flask import Flask, render_template, request, redirect, session, jsonify
-import os, json, aiohttp, asyncio, random, string, io, time
+import os
+import json
+import aiohttp
+import asyncio
+import random
+import string
+import io
+import time
+
 from datetime import timedelta
 
 from telegram import Update, InputFile
@@ -21,7 +29,11 @@ app.permanent_session_lifetime = timedelta(minutes=5)
 # ================= CONFIG =================
 USUARIO = "PAPI"
 PASSWORD = "DEXTER"
-MASTER_KEY = os.environ.get("MASTER_KEY", "CHINITA")
+
+MASTER_KEY = os.environ.get(
+    "MASTER_KEY",
+    "CHINITA"
+)
 
 DB_FILE = "database.json"
 KEYS_FILE = "keys.json"
@@ -31,7 +43,11 @@ TOKEN = os.environ.get("BOT_TOKEN")
 PUBLIC_URL = os.environ.get("PUBLIC_URL")
 
 ADMIN_ID = 6841201622
-API_URL = PUBLIC_URL.rstrip("/") + "/bot/post"
+
+API_URL = (
+    PUBLIC_URL.rstrip("/") +
+    "/bot/post"
+)
 
 START_TIME = time.time()
 
@@ -101,7 +117,8 @@ def gen_key():
 
     return ''.join(
         random.choices(
-            string.ascii_uppercase + string.digits,
+            string.ascii_uppercase +
+            string.digits,
             k=16
         )
     )
@@ -199,7 +216,9 @@ def bot_post():
     data = request.json
     posts = load_posts()
 
-    vid = get_video_id(data.get("youtube"))
+    vid = get_video_id(
+        data.get("youtube")
+    )
 
     thumb = (
         f"https://img.youtube.com/vi/{vid}/0.jpg"
@@ -262,7 +281,9 @@ async def yt(update, ctx):
             }
         )
 
-    await update.message.reply_text("✅ Publicado")
+    await update.message.reply_text(
+        "✅ Publicado"
+    )
 
 async def list_cmd(update, ctx):
 
@@ -322,7 +343,7 @@ async def transform(update, ctx):
     if not is_admin(update):
         return
 
-    # Debe responder a un archivo
+    # 🔥 Debe responder a archivo
     if not update.message.reply_to_message:
 
         await update.message.reply_text(
@@ -359,43 +380,70 @@ async def transform(update, ctx):
             f"mod_{doc.file_name}"
         )
 
-        await tg_file.download_to_drive(input_path)
+        # 🔥 descargar archivo
+        await tg_file.download_to_drive(
+            input_path
+        )
 
         await update.message.reply_text(
             "🔍 Leyendo bundle..."
         )
 
+        # 🔥 abrir bundle
         env = UnityPy.load(input_path)
 
         modificados = 0
 
+        # 🔥 recorrer objetos
         for obj in env.objects:
 
             try:
 
+                # 🔥 SOLO Transform
+                if obj.type.name != "Transform":
+                    continue
+
                 data = obj.read()
 
-                # SOLO Transform
-                if hasattr(data, "m_LocalScale"):
+                # 🔥 obtener valores actuales
+                old_x = data.m_LocalScale.x
+                old_y = data.m_LocalScale.y
+                old_z = data.m_LocalScale.z
 
-                    data.m_LocalScale.x *= 0.8
-                    data.m_LocalScale.y *= 0.8
-                    data.m_LocalScale.z *= 0.8
+                # 🔥 modificar escala
+                data.m_LocalScale.x = old_x * 0.8
+                data.m_LocalScale.y = old_y * 0.8
+                data.m_LocalScale.z = old_z * 0.8
 
-                    obj.save_typetree(data)
+                # 🔥 guardar typetree
+                obj.save_typetree(data)
 
-                    modificados += 1
+                modificados += 1
 
-            except:
-                pass
+                print(
+                    f"[Transform] "
+                    f"{old_x}, {old_y}, {old_z}"
+                    f" -> "
+                    f"{data.m_LocalScale.x}, "
+                    f"{data.m_LocalScale.y}, "
+                    f"{data.m_LocalScale.z}"
+                )
+
+            except Exception as e:
+
+                print(
+                    f"Transform Error: {e}"
+                )
 
         await update.message.reply_text(
             f"🛠 Transform modificados: {modificados}"
         )
 
+        # 🔥 GUARDAR BUNDLE REAL
         with open(output_path, "wb") as f:
-            f.write(env.file.save())
+            f.write(env.save())
 
+        # 🔥 enviar archivo
         await update.message.reply_document(
             document=open(output_path, "rb"),
             filename=f"mod_{doc.file_name}",
@@ -404,8 +452,10 @@ async def transform(update, ctx):
 
         # 🔥 limpiar temporales
         try:
+
             os.remove(input_path)
             os.remove(output_path)
+
         except:
             pass
 
@@ -467,7 +517,12 @@ async def liststore(update, ctx):
     txt = "🛒 PRODUCTOS:\n\n"
 
     for i, p in enumerate(data):
-        txt += f"{i} - {p['nombre']} | ${p['precio']}\n"
+
+        txt += (
+            f"{i} - "
+            f"{p['nombre']} | "
+            f"${p['precio']}\n"
+        )
 
     await update.message.reply_text(txt)
 
@@ -506,7 +561,10 @@ async def foto(update, ctx):
 
     file = await update.message.photo[-1].get_file()
 
-    path = f"static/store_{random.randint(1000,9999)}.jpg"
+    path = (
+        f"static/store_"
+        f"{random.randint(1000,9999)}.jpg"
+    )
 
     await file.download_to_drive(path)
 
@@ -562,7 +620,10 @@ async def genkey(update, ctx):
 
     keys = load_keys()
 
-    nuevas = [gen_key() for _ in range(n)]
+    nuevas = [
+        gen_key()
+        for _ in range(n)
+    ]
 
     keys.extend(nuevas)
 
@@ -591,27 +652,65 @@ async def delkeys(update, ctx):
 # ================= INIT =================
 bot = ApplicationBuilder().token(TOKEN).build()
 
-bot.add_handler(CommandHandler("start", start_cmd))
+bot.add_handler(
+    CommandHandler("start", start_cmd)
+)
 
-bot.add_handler(CommandHandler("yt", yt))
-bot.add_handler(CommandHandler("list", list_cmd))
-bot.add_handler(CommandHandler("delete", delete_cmd))
-bot.add_handler(CommandHandler("clear", clear))
+bot.add_handler(
+    CommandHandler("yt", yt)
+)
 
-bot.add_handler(CommandHandler("transform", transform))
+bot.add_handler(
+    CommandHandler("list", list_cmd)
+)
 
-bot.add_handler(CommandHandler("addstore", addstore))
-bot.add_handler(CommandHandler("liststore", liststore))
-bot.add_handler(CommandHandler("delstore", delstore))
+bot.add_handler(
+    CommandHandler("delete", delete_cmd)
+)
 
-bot.add_handler(CommandHandler("stats", stats))
-bot.add_handler(CommandHandler("ping", ping))
-bot.add_handler(CommandHandler("uptime", uptime))
+bot.add_handler(
+    CommandHandler("clear", clear)
+)
 
-bot.add_handler(CommandHandler("genkey", genkey))
-bot.add_handler(CommandHandler("delkeysall", delkeys))
+bot.add_handler(
+    CommandHandler("transform", transform)
+)
 
-bot.add_handler(MessageHandler(filters.PHOTO, foto))
+bot.add_handler(
+    CommandHandler("addstore", addstore)
+)
+
+bot.add_handler(
+    CommandHandler("liststore", liststore)
+)
+
+bot.add_handler(
+    CommandHandler("delstore", delstore)
+)
+
+bot.add_handler(
+    CommandHandler("stats", stats)
+)
+
+bot.add_handler(
+    CommandHandler("ping", ping)
+)
+
+bot.add_handler(
+    CommandHandler("uptime", uptime)
+)
+
+bot.add_handler(
+    CommandHandler("genkey", genkey)
+)
+
+bot.add_handler(
+    CommandHandler("delkeysall", delkeys)
+)
+
+bot.add_handler(
+    MessageHandler(filters.PHOTO, foto)
+)
 
 # ================= MAIN =================
 async def main():
@@ -619,7 +718,7 @@ async def main():
     await bot.initialize()
     await bot.start()
 
-    print("✅ Bot iniciado con polling")
+    print("✅ Bot iniciado")
 
     await bot.updater.start_polling()
 
@@ -635,9 +734,11 @@ if __name__ == "__main__":
         daemon=True
     ).start()
 
-    port = int(os.environ.get("PORT", 10000))
+    port = int(
+        os.environ.get("PORT", 10000)
+    )
 
     app.run(
         host="0.0.0.0",
         port=port
-        )
+)

@@ -1,26 +1,24 @@
 from flask import Flask, render_template, request, redirect, session, jsonify
-import os
-import json
-import aiohttp
-import asyncio
-import random
-import string
-import io
-import time
-import UnityPy
-
+import os, json, aiohttp, asyncio, random, string, io, time
 from datetime import timedelta
 
 from telegram import Update, InputFile
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
+    ContextTypes,
     MessageHandler,
     filters
 )
 
+import UnityPy
+import shutil
+
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev_key")
+
+# 🔥 AUTO LOGOUT 5 MIN
+app.permanent_session_lifetime = timedelta(minutes=5)
 
 # ================= CONFIG =================
 USUARIO = "PAPI"
@@ -35,25 +33,20 @@ TOKEN = os.environ.get("BOT_TOKEN")
 PUBLIC_URL = os.environ.get("PUBLIC_URL")
 
 ADMIN_ID = 6841201622
-
 API_URL = PUBLIC_URL.rstrip("/") + "/bot/post"
 
 START_TIME = time.time()
 
-# ================= SESSION =================
-app.permanent_session_lifetime = timedelta(minutes=5)
+# ================= UNITY TEMP =================
+TEMP_DIR = "temp"
+
+if not os.path.exists(TEMP_DIR):
+    os.makedirs(TEMP_DIR)
 
 # ================= SEGURIDAD =================
 @app.before_request
 def proteger():
-
-    libres = [
-        "/",
-        "/bot/post",
-        "/logout",
-        "/gato",
-        "/downloader"
-    ]
+    libres = ["/", "/bot/post", "/webhook", "/logout", "/gato", "/downloader"]
 
     if request.path.startswith("/static"):
         return
@@ -68,38 +61,35 @@ def proteger():
 
 # ================= JSON =================
 def load_json(file):
-
     if not os.path.exists(file):
         return []
 
-    with open(file, "r", encoding="utf-8") as f:
+    with open(file) as f:
         return json.load(f)
 
 def save_json(file, data):
-
-    with open(file, "w", encoding="utf-8") as f:
+    with open(file, "w") as f:
         json.dump(data, f, indent=4)
 
 def load_posts():
     return load_json(DB_FILE)
 
-def save_posts(data):
-    save_json(DB_FILE, data)
+def save_posts(d):
+    save_json(DB_FILE, d)
 
 def load_keys():
     return load_json(KEYS_FILE)
 
-def save_keys(data):
-    save_json(KEYS_FILE, data)
+def save_keys(d):
+    save_json(KEYS_FILE, d)
 
 def load_store():
     return load_json(STORE_FILE)
 
-def save_store(data):
-    save_json(STORE_FILE, data)
+def save_store(d):
+    save_json(STORE_FILE, d)
 
 def gen_key():
-
     return ''.join(
         random.choices(
             string.ascii_uppercase + string.digits,
@@ -108,7 +98,6 @@ def gen_key():
     )
 
 def get_video_id(url):
-
     if "v=" in url:
         return url.split("v=")[1].split("&")[0]
 
@@ -131,17 +120,15 @@ def login():
 
         if user == USUARIO and password == PASSWORD:
 
+            # 🔥 MASTER KEY
             if key == MASTER_KEY:
-
                 session.permanent = True
                 session["login"] = True
-
                 return redirect("/panel")
 
+            # 🔥 KEY NORMAL
             if key in keys:
-
                 keys.remove(key)
-
                 save_keys(keys)
 
                 session.permanent = True
@@ -158,9 +145,7 @@ def login():
 
 @app.route("/logout")
 def logout():
-
     session.clear()
-
     return redirect("/")
 
 # ================= WEB =================
@@ -170,7 +155,6 @@ def panel():
 
 @app.route("/posts")
 def posts():
-
     return render_template(
         "posts.html",
         posts=load_posts()
@@ -178,7 +162,6 @@ def posts():
 
 @app.route("/store")
 def store():
-
     return render_template(
         "store.html",
         productos=load_store()
@@ -197,7 +180,6 @@ def downloader():
 def bot_post():
 
     data = request.json
-
     posts = load_posts()
 
     vid = get_video_id(data.get("youtube"))
@@ -221,6 +203,7 @@ def bot_post():
 def is_admin(update):
     return update.effective_user.id == ADMIN_ID
 
+# ================= START =================
 async def start_cmd(update: Update, ctx):
 
     if not is_admin(update):
@@ -229,25 +212,13 @@ async def start_cmd(update: Update, ctx):
     await update.message.reply_text("""
 🤖 BOT ACTIVO
 
-📌 COMANDOS
+📌 COMANDOS:
 
-/yt
-/list
-/delete
-/clear
-
-/addstore
-/liststore
-/delstore
-
-/stats
-/ping
-/uptime
-
-/genkey
-/delkeysall
-
-/wallhack
+/yt /list /delete /clear
+/addstore /liststore /delstore
+/stats /ping /uptime
+/genkey /delkeysall
+/transform
 """)
 
 # ================= POSTS =================
@@ -257,11 +228,9 @@ async def yt(update, ctx):
         return
 
     if len(ctx.args) < 2:
-
         await update.message.reply_text(
             "Uso: /yt link archivo"
         )
-
         return
 
     async with aiohttp.ClientSession() as s:
@@ -274,9 +243,7 @@ async def yt(update, ctx):
             }
         )
 
-    await update.message.reply_text(
-        "✅ Publicado"
-    )
+    await update.message.reply_text("✅ Publicado")
 
 async def list_cmd(update, ctx):
 
@@ -300,7 +267,6 @@ async def delete_cmd(update, ctx):
         return
 
     try:
-
         i = int(ctx.args[0])
 
         posts = load_posts()
@@ -314,10 +280,7 @@ async def delete_cmd(update, ctx):
         )
 
     except:
-
-        await update.message.reply_text(
-            "Error"
-        )
+        await update.message.reply_text("Error")
 
 async def clear(update, ctx):
 
@@ -330,136 +293,225 @@ async def clear(update, ctx):
         "Todo eliminado"
     )
 
-# ================= WALLHACK JSON =================
-async def wallhack(update, ctx):
+# ================= TRANSFORM =================
+async def transform(update, ctx):
 
     if not is_admin(update):
         return
 
+    # Debe responder a un archivo
     if not update.message.reply_to_message:
 
         await update.message.reply_text(
-            "❌ Responde a un AssetBundle"
+            "❌ Responde a un archivo Unity."
         )
 
         return
 
-    msg = update.message.reply_to_message
+    doc = update.message.reply_to_message.document
 
-    if not msg.document:
+    if not doc:
 
         await update.message.reply_text(
-            "❌ No hay archivo"
+            "❌ Archivo inválido."
         )
 
         return
 
-    archivo = msg.document
+    nombre = doc.file_name.lower()
 
-    nombre = archivo.file_name
-
-    await update.message.reply_text(
-        f"🧱 Descargando:\n{nombre}"
+    extensiones = (
+        ".assets",
+        ".bundle",
+        ".unity3d",
+        ".assetbundle"
     )
+
+    if not nombre.endswith(extensiones):
+
+        await update.message.reply_text(
+            "❌ No parece un AssetBundle."
+        )
+
+        return
 
     try:
 
-        # DESCARGAR
-        tg_file = await archivo.get_file()
-
-        ruta = f"temp_{nombre}"
-
-        await asyncio.wait_for(
-            tg_file.download_to_drive(ruta),
-            timeout=120
+        await update.message.reply_text(
+            "📦 Descargando bundle..."
         )
+
+        file = await doc.get_file()
+
+        input_path = os.path.join(
+            TEMP_DIR,
+            f"input_{doc.file_name}"
+        )
+
+        output_path = os.path.join(
+            TEMP_DIR,
+            f"mod_{doc.file_name}"
+        )
+
+        await file.download_to_drive(input_path)
 
         await update.message.reply_text(
-            "⚙️ Exportando JSON..."
+            "🔍 Leyendo assets..."
         )
 
-        # CARGAR UNITYPY
-        loop = asyncio.get_event_loop()
+        env = UnityPy.load(input_path)
 
-        env = await loop.run_in_executor(
-            None,
-            UnityPy.load,
-            ruta
-        )
+        modificados = 0
 
-        eliminados = 0
-        colliders = 0
-
-        # RECORRER OBJETOS
         for obj in env.objects:
 
             try:
 
-                tree = obj.read_typetree()
+                data = obj.read()
 
-                if not isinstance(tree, dict):
-                    continue
+                if hasattr(data, "m_LocalScale"):
 
-                nombre_obj = str(
-                    tree.get("m_Name", "")
-                )
+                    data.m_LocalScale.x *= 0.8
+                    data.m_LocalScale.y *= 0.8
+                    data.m_LocalScale.z *= 0.8
 
-                # ICEWALL
-                if nombre_obj == "IceWall":
+                    obj.save_typetree(data)
 
-                    tree["m_Name"] = "REMOVED"
-
-                    obj.save_typetree(tree)
-
-                    eliminados += 1
-
-                # COLLIDER
-                if nombre_obj == "Collider":
-
-                    if "m_IsActive" in tree:
-
-                        tree["m_IsActive"] = False
-
-                        obj.save_typetree(tree)
-
-                        colliders += 1
+                    modificados += 1
 
             except:
                 pass
 
         await update.message.reply_text(
-            "💾 Rebuild AssetBundle..."
+            f"🛠 Transform modificados: {modificados}"
         )
 
-        # GUARDAR
-        salida = f"mod_{nombre}"
-
-        with open(salida, "wb") as f:
+        with open(output_path, "wb") as f:
             f.write(env.file.save())
 
-        # ENVIAR
         await update.message.reply_document(
-            document=open(salida, "rb"),
-            caption=(
-                f"✅ WALLHACK JSON LISTO\n\n"
-                f"IceWall modificados: {eliminados}\n"
-                f"Colliders modificados: {colliders}"
-            )
+            document=open(output_path, "rb"),
+            filename=f"mod_{doc.file_name}",
+            caption="✅ Bundle transformado"
         )
 
-        # LIMPIAR
+        # limpiar temporales
         try:
-            os.remove(ruta)
-            os.remove(salida)
-
+            os.remove(input_path)
+            os.remove(output_path)
         except:
             pass
 
     except Exception as e:
 
         await update.message.reply_text(
-            f"❌ Error:\n{e}"
+            f"❌ Error:\n{str(e)}"
         )
+
+# ================= STORE =================
+async def addstore(update, ctx):
+
+    if not is_admin(update):
+        return
+
+    try:
+
+        nombre, precio, desc, link = (
+            " ".join(ctx.args).split("|")
+        )
+
+        data = load_store()
+
+        data.append({
+            "nombre": nombre.strip(),
+            "precio": precio.strip(),
+            "descripcion": desc.strip(),
+            "link": link.strip(),
+            "imagen": None
+        })
+
+        save_store(data)
+
+        await update.message.reply_text(
+            "Producto creado, manda imagen"
+        )
+
+    except:
+
+        await update.message.reply_text(
+            "Uso: /addstore nombre | precio | desc | link"
+        )
+
+async def liststore(update, ctx):
+
+    if not is_admin(update):
+        return
+
+    data = load_store()
+
+    if not data:
+
+        await update.message.reply_text(
+            "No hay productos"
+        )
+
+        return
+
+    txt = "🛒 PRODUCTOS:\n\n"
+
+    for i, p in enumerate(data):
+        txt += f"{i} - {p['nombre']} | ${p['precio']}\n"
+
+    await update.message.reply_text(txt)
+
+async def delstore(update, ctx):
+
+    if not is_admin(update):
+        return
+
+    try:
+
+        i = int(ctx.args[0])
+
+        data = load_store()
+
+        data.pop(i)
+
+        save_store(data)
+
+        await update.message.reply_text(
+            "Producto eliminado"
+        )
+
+    except:
+
+        await update.message.reply_text(
+            "Uso: /delstore index"
+        )
+
+async def foto(update, ctx):
+
+    if not is_admin(update):
+        return
+
+    if not update.message.photo:
+        return
+
+    file = await update.message.photo[-1].get_file()
+
+    path = f"static/store_{random.randint(1000,9999)}.jpg"
+
+    await file.download_to_drive(path)
+
+    data = load_store()
+
+    if data:
+        data[-1]["imagen"] = "/" + path
+        save_store(data)
+
+    await update.message.reply_text(
+        "Imagen guardada"
+    )
 
 # ================= INFO =================
 async def stats(update, ctx):
@@ -526,15 +578,7 @@ async def delkeys(update, ctx):
     )
 
 # ================= INIT =================
-bot = (
-    ApplicationBuilder()
-    .token(TOKEN)
-    .read_timeout(120)
-    .write_timeout(120)
-    .connect_timeout(120)
-    .pool_timeout(120)
-    .build()
-)
+bot = ApplicationBuilder().token(TOKEN).build()
 
 bot.add_handler(CommandHandler("start", start_cmd))
 
@@ -543,6 +587,12 @@ bot.add_handler(CommandHandler("list", list_cmd))
 bot.add_handler(CommandHandler("delete", delete_cmd))
 bot.add_handler(CommandHandler("clear", clear))
 
+bot.add_handler(CommandHandler("transform", transform))
+
+bot.add_handler(CommandHandler("addstore", addstore))
+bot.add_handler(CommandHandler("liststore", liststore))
+bot.add_handler(CommandHandler("delstore", delstore))
+
 bot.add_handler(CommandHandler("stats", stats))
 bot.add_handler(CommandHandler("ping", ping))
 bot.add_handler(CommandHandler("uptime", uptime))
@@ -550,21 +600,21 @@ bot.add_handler(CommandHandler("uptime", uptime))
 bot.add_handler(CommandHandler("genkey", genkey))
 bot.add_handler(CommandHandler("delkeysall", delkeys))
 
-bot.add_handler(CommandHandler("wallhack", wallhack))
+bot.add_handler(MessageHandler(filters.PHOTO, foto))
 
 # ================= MAIN =================
 async def main():
 
     await bot.initialize()
-
     await bot.start()
 
-    print("✅ Bot iniciado")
+    print("✅ Bot iniciado con polling")
 
     await bot.updater.start_polling()
 
     await asyncio.Event().wait()
 
+# ================= RUN =================
 if __name__ == "__main__":
 
     import threading
@@ -579,4 +629,4 @@ if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
         port=port
-    )
+        )

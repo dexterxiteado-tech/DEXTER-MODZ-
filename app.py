@@ -209,6 +209,10 @@ def gato():
 def downloader():
     return render_template("downloader.html")
 
+@app.route("/modificador")
+def modificador():
+    return render_template("modificador.html")
+
 # ================= BOT POST =================
 @app.route("/bot/post", methods=["POST"])
 def bot_post():
@@ -741,4 +745,5 @@ if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
         port=port
-)
+        )
+        

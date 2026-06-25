@@ -1,0 +1,190 @@
+<!DOCTYPE html><html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Transform Inbox Mobile</title><style>
+
+body{
+margin:0;
+font-family:Arial,sans-serif;
+background:#0b0f1a;
+color:white;
+}
+
+/* HEADER */
+
+.header{
+position:sticky;
+top:0;
+z-index:100;
+background:#111827ee;
+backdrop-filter:blur(10px);
+padding:15px;
+border-bottom:1px solid #2b2f3a;
+}
+
+.header h1{
+font-size:18px;
+margin:0;
+}
+
+.header p{
+margin:5px 0 0;
+font-size:12px;
+opacity:.7;
+}
+
+/* SEARCH */
+
+.search{
+padding:10px;
+}
+
+.search input{
+width:100%;
+padding:12px;
+border-radius:12px;
+border:none;
+outline:none;
+background:#1f2937;
+color:white;
+font-size:14px;
+}
+
+/* LIST */
+
+.container{
+padding:10px;
+display:flex;
+flex-direction:column;
+gap:12px;
+}
+
+/* CARD */
+
+.card{
+background:#111827;
+border:1px solid #2b2f3a;
+border-radius:16px;
+padding:14px;
+box-shadow:0 0 10px #00000040;
+}
+
+.title{
+font-size:16px;
+font-weight:bold;
+margin-bottom:6px;
+}
+
+.info{
+font-size:12px;
+opacity:.8;
+margin-bottom:4px;
+}
+
+.status{
+font-size:12px;
+margin-bottom:10px;
+}
+
+.pending{color:#facc15;}
+.approved{color:#22c55e;}
+.rejected{color:#ef4444;}
+
+/* INPUTS SCALE */
+
+.scale{
+display:flex;
+gap:6px;
+margin:10px 0;
+}
+
+.scale input{
+flex:1;
+padding:10px;
+border:none;
+border-radius:10px;
+background:#1f2937;
+color:white;
+text-align:center;
+}
+
+/* BUTTONS */
+
+.buttons{
+display:grid;
+grid-template-columns:repeat(3,1fr);
+gap:8px;
+}
+
+.btn{
+padding:12px;
+border:none;
+border-radius:12px;
+font-weight:bold;
+font-size:12px;
+cursor:pointer;
+}
+
+.view{
+background:#2563eb;
+color:white;
+}
+
+.ok{
+background:#16a34a;
+color:white;
+}
+
+.no{
+background:#dc2626;
+color:white;
+}
+
+/* FOOTER BUTTON */
+
+.footer{
+position:fixed;
+bottom:15px;
+left:50%;
+transform:translateX(-50%);
+width:90%;
+}
+
+.apply{
+width:100%;
+padding:14px;
+border:none;
+border-radius:14px;
+font-size:14px;
+font-weight:bold;
+background:linear-gradient(45deg,#22c55e,#06b6d4);
+color:black;
+box-shadow:0 0 20px #22c55e55;
+}
+
+</style></head><body><div class="header">
+<h1>📥 Transform Inbox</h1>
+<p>Panel móvil de edición de bundles</p>
+</div><div class="search">
+<input type="text" placeholder="🔍 Buscar transform...">
+</div><div class="container"><!-- CARD --><div class="card"><div class="title">🦴 Head</div><div class="info">PathID: 12458</div><div class="status pending">Estado: Pendiente</div><div class="scale">
+<input value="1.0">
+<input value="1.0">
+<input value="1.0">
+</div><div class="buttons">
+<button class="btn view">👁</button>
+<button class="btn ok">✅</button>
+<button class="btn no">❌</button>
+</div></div><!-- CARD --><div class="card"><div class="title">🔫 Weapon_Main</div><div class="info">PathID: 99184</div><div class="status approved">Estado: Aprobado</div><div class="scale">
+<input value="0.8">
+<input value="0.8">
+<input value="0.8">
+</div><div class="buttons">
+<button class="btn view">👁</button>
+<button class="btn ok">✅</button>
+<button class="btn no">❌</button>
+</div></div></div><div class="footer">
+<button class="apply">🚀 Aplicar cambios al bundle</button>
+</div></body>
+</html>

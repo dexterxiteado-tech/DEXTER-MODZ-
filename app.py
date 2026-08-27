@@ -8,7 +8,6 @@ import string
 import io
 import time
 import re
-import hashlib
 import threading
 
 from datetime import timedelta
@@ -20,7 +19,8 @@ from telegram.ext import (
     CallbackQueryHandler,
     MessageHandler,
     filters,
-    ContextTypes
+    ContextTypes,
+    ConversationHandler
 )
 
 # ==================== FLASK APP ====================
@@ -53,6 +53,15 @@ if not os.path.exists(TEMP_DIR):
 
 if not os.path.exists("static"):
     os.makedirs("static")
+
+# ==================== ESTADOS PARA CONVERSACIÓN ====================
+WAITING_LINK = 1
+WAITING_NAME = 2
+WAITING_STORE_NAME = 3
+WAITING_STORE_PRICE = 4
+WAITING_STORE_DESC = 5
+WAITING_STORE_LINK = 6
+WAITING_KEYS_COUNT = 7
 
 # ==================== FUNCIONES JSON ====================
 def load_json(file):
@@ -199,7 +208,7 @@ async def menu_yt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     
     keyboard = [
-        [InlineKeyboardButton("📥 Agregar Video", callback_data="yt_add")],
+        [InlineKeyboardButton("📥 Agregar Video", callback_data="yt_add_start")],
         [InlineKeyboardButton("📋 Listar Videos", callback_data="yt_list")],
         [InlineKeyboardButton("🗑️ Eliminar Video", callback_data="yt_delete")],
         [InlineKeyboardButton("🧹 Limpiar Todo", callback_data="yt_clear")],
@@ -212,18 +221,127 @@ async def menu_yt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-async def yt_add(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+# ==================== AGREGAR VIDEO (SIN COMANDOS) ====================
+async def yt_add_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    
+    keyboard = [[InlineKeyboardButton("❌ Cancelar", callback_data="yt_cancel")]]
+    
     await query.edit_message_text(
-        "📥 **Agregar Video**\n\n"
-        "Formato:\n"
-        "`/yt link_youtube nombre_archivo`\n\n"
+        "📥 **AGREGAR VIDEO**\n\n"
+        "📌 **PASO 1:** Envía el **link de YouTube**\n\n"
         "Ejemplo:\n"
-        "`/yt https://youtu.be/xxxxx video1`",
+        "`https://youtu.be/xxxxx` o `https://www.youtube.com/watch?v=xxxxx`\n\n"
+        "🔴 Presiona 'Cancelar' para salir.",
+        reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown"
     )
+    
+    ctx.user_data['yt_step'] = 'waiting_link'
+    return WAITING_LINK
 
+async def yt_receive_link(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update):
+        return
+    
+    link = update.message.text.strip()
+    
+    # Validar link de YouTube
+    if not get_video_id(link):
+        await update.message.reply_text(
+            "❌ **Link inválido**\n\n"
+            "Envía un link válido de YouTube:\n"
+            "`https://youtu.be/xxxxx`\n"
+            "`https://www.youtube.com/watch?v=xxxxx`",
+            parse_mode="Markdown"
+        )
+        return WAITING_LINK
+    
+    ctx.user_data['yt_link'] = link
+    ctx.user_data['yt_step'] = 'waiting_name'
+    
+    keyboard = [[InlineKeyboardButton("❌ Cancelar", callback_data="yt_cancel")]]
+    
+    await update.message.reply_text(
+        f"✅ **Link guardado:**\n`{link}`\n\n"
+        "📌 **PASO 2:** Envía el **nombre del archivo**\n\n"
+        "Ejemplo:\n"
+        "`video_skin`\n\n"
+        "📁 Se guardará como: `video_skin.unity3d`",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
+    
+    return WAITING_NAME
+
+async def yt_receive_name(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update):
+        return
+    
+    name = update.message.text.strip()
+    
+    if not name or len(name) < 2:
+        await update.message.reply_text(
+            "❌ **Nombre inválido**\n\n"
+            "El nombre debe tener al menos 2 caracteres.\n"
+            "Ejemplo: `video_skin`",
+            parse_mode="Markdown"
+        )
+        return WAITING_NAME
+    
+    link = ctx.user_data.get('yt_link')
+    
+    if not link:
+        await update.message.reply_text("❌ Error: No hay link guardado. Vuelve a empezar.")
+        return
+    
+    # Guardar en la base de datos
+    posts = load_posts()
+    vid = get_video_id(link)
+    thumb = f"https://img.youtube.com/vi/{vid}/0.jpg" if vid else None
+    
+    posts.append({
+        "youtube": link,
+        "file": name,
+        "thumbnail": thumb,
+        "created": time.time()
+    })
+    save_posts(posts)
+    
+    # Enviar notificación al bot (web)
+    try:
+        async with aiohttp.ClientSession() as s:
+            await s.post(API_URL, json={"youtube": link, "file": name})
+    except:
+        pass
+    
+    await update.message.reply_text(
+        f"✅ **VIDEO PUBLICADO**\n\n"
+        f"📹 **Link:** {link}\n"
+        f"📁 **Archivo:** `{name}`\n"
+        f"🖼️ **Thumbnail:** {thumb}\n\n"
+        f"📌 Para agregar otro, usa /start",
+        parse_mode="Markdown"
+    )
+    
+    ctx.user_data.clear()
+    return -1
+
+async def yt_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    ctx.user_data.clear()
+    
+    await query.edit_message_text(
+        "❌ **Operación cancelada**\n\n"
+        "Usa /start para volver al menú principal.",
+        parse_mode="Markdown"
+    )
+    return -1
+
+# ==================== LISTAR VIDEOS ====================
 async def yt_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -236,7 +354,10 @@ async def yt_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     txt = "📋 **VIDEOS GUARDADOS:**\n\n"
     for i, p in enumerate(posts):
         nombre = p.get('file', 'sin nombre')
-        txt += f"{i}. {nombre}\n"
+        txt += f"{i}. `{nombre}`\n"
+    
+    if len(txt) > 4000:
+        txt = txt[:3900] + "\n... (demasiados videos)"
     
     keyboard = [[InlineKeyboardButton("🔙 Volver", callback_data="menu_yt")]]
     
@@ -246,6 +367,7 @@ async def yt_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
+# ==================== ELIMINAR VIDEO ====================
 async def yt_delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -279,7 +401,7 @@ async def yt_delete_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         if 0 <= idx < len(posts):
             removed = posts.pop(idx)
             save_posts(posts)
-            await query.edit_message_text(f"✅ Video eliminado: {removed.get('file', 'sin nombre')}")
+            await query.edit_message_text(f"✅ Video eliminado: `{removed.get('file', 'sin nombre')}`")
         else:
             await query.edit_message_text("❌ Error: Video no encontrado")
     except:
@@ -291,6 +413,7 @@ async def yt_delete_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+# ==================== LIMPIAR VIDEOS ====================
 async def yt_clear(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -319,7 +442,7 @@ async def menu_store(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     
     keyboard = [
-        [InlineKeyboardButton("➕ Agregar Producto", callback_data="store_add")],
+        [InlineKeyboardButton("➕ Agregar Producto", callback_data="store_add_start")],
         [InlineKeyboardButton("📋 Listar Productos", callback_data="store_list")],
         [InlineKeyboardButton("🗑️ Eliminar Producto", callback_data="store_delete")],
         [InlineKeyboardButton("🔙 Volver", callback_data="back_main")]
@@ -331,18 +454,155 @@ async def menu_store(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-async def store_add(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+# ==================== AGREGAR PRODUCTO (SIN COMANDOS) ====================
+async def store_add_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    
+    keyboard = [[InlineKeyboardButton("❌ Cancelar", callback_data="store_cancel")]]
+    
     await query.edit_message_text(
-        "📦 **Agregar Producto**\n\n"
-        "Formato:\n"
-        "`/addstore nombre | precio | descripción | link`\n\n"
+        "📦 **AGREGAR PRODUCTO**\n\n"
+        "📌 **PASO 1:** Envía el **nombre del producto**\n\n"
         "Ejemplo:\n"
-        "`/addstore Skin XP | 10.99 | Skin exclusiva | https://link.com`",
+        "`Skin XP Legendaria`\n\n"
+        "🔴 Presiona 'Cancelar' para salir.",
+        reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown"
     )
+    
+    ctx.user_data['store_step'] = 'waiting_name'
+    return WAITING_STORE_NAME
 
+async def store_receive_name(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update):
+        return
+    
+    name = update.message.text.strip()
+    
+    if not name or len(name) < 2:
+        await update.message.reply_text("❌ Nombre inválido (mínimo 2 caracteres)")
+        return WAITING_STORE_NAME
+    
+    ctx.user_data['store_name'] = name
+    ctx.user_data['store_step'] = 'waiting_price'
+    
+    keyboard = [[InlineKeyboardButton("❌ Cancelar", callback_data="store_cancel")]]
+    
+    await update.message.reply_text(
+        f"✅ **Nombre:** `{name}`\n\n"
+        "📌 **PASO 2:** Envía el **precio**\n\n"
+        "Ejemplo:\n"
+        "`10.99`\n"
+        "`25`\n"
+        "`Gratis`",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
+    
+    return WAITING_STORE_PRICE
+
+async def store_receive_price(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update):
+        return
+    
+    price = update.message.text.strip()
+    
+    if not price:
+        await update.message.reply_text("❌ Precio inválido")
+        return WAITING_STORE_PRICE
+    
+    ctx.user_data['store_price'] = price
+    ctx.user_data['store_step'] = 'waiting_desc'
+    
+    keyboard = [[InlineKeyboardButton("❌ Cancelar", callback_data="store_cancel")]]
+    
+    await update.message.reply_text(
+        f"✅ **Precio:** `{price}`\n\n"
+        "📌 **PASO 3:** Envía la **descripción**\n\n"
+        "Ejemplo:\n"
+        "`Skin exclusiva con efectos especiales`",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
+    
+    return WAITING_STORE_DESC
+
+async def store_receive_desc(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update):
+        return
+    
+    desc = update.message.text.strip()
+    
+    if not desc or len(desc) < 3:
+        await update.message.reply_text("❌ Descripción inválida (mínimo 3 caracteres)")
+        return WAITING_STORE_DESC
+    
+    ctx.user_data['store_desc'] = desc
+    ctx.user_data['store_step'] = 'waiting_link'
+    
+    keyboard = [[InlineKeyboardButton("❌ Cancelar", callback_data="store_cancel")]]
+    
+    await update.message.reply_text(
+        f"✅ **Descripción:** `{desc[:50]}...`\n\n"
+        "📌 **PASO 4:** Envía el **link del producto**\n\n"
+        "Ejemplo:\n"
+        "`https://mega.nz/file/xxxxx`\n"
+        "`https://drive.google.com/file/xxxxx`",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
+    
+    return WAITING_STORE_LINK
+
+async def store_receive_link(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update):
+        return
+    
+    link = update.message.text.strip()
+    
+    if not link or not link.startswith(('http://', 'https://')):
+        await update.message.reply_text("❌ Link inválido. Debe comenzar con http:// o https://")
+        return WAITING_STORE_LINK
+    
+    # Guardar producto
+    data = load_store()
+    data.append({
+        "nombre": ctx.user_data.get('store_name'),
+        "precio": ctx.user_data.get('store_price'),
+        "descripcion": ctx.user_data.get('store_desc'),
+        "link": link,
+        "imagen": None
+    })
+    save_store(data)
+    
+    await update.message.reply_text(
+        f"✅ **PRODUCTO CREADO**\n\n"
+        f"📦 **Nombre:** `{ctx.user_data.get('store_name')}`\n"
+        f"💰 **Precio:** `{ctx.user_data.get('store_price')}`\n"
+        f"📄 **Descripción:** {ctx.user_data.get('store_desc')}\n"
+        f"🔗 **Link:** {link}\n\n"
+        "📸 Ahora **envía una imagen** para el producto (opcional).",
+        parse_mode="Markdown"
+    )
+    
+    ctx.user_data.clear()
+    return -1
+
+async def store_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    ctx.user_data.clear()
+    
+    await query.edit_message_text(
+        "❌ **Operación cancelada**\n\n"
+        "Usa /start para volver al menú principal.",
+        parse_mode="Markdown"
+    )
+    return -1
+
+# ==================== LISTAR PRODUCTOS ====================
 async def store_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -354,7 +614,13 @@ async def store_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     
     txt = "🛒 **PRODUCTOS:**\n\n"
     for i, p in enumerate(data):
-        txt += f"{i} - {p.get('nombre', 'sin nombre')} | ${p.get('precio', '0')}\n"
+        txt += f"{i}. **{p.get('nombre', 'sin nombre')}** | ${p.get('precio', '0')}\n"
+        if p.get('descripcion'):
+            txt += f"   {p.get('descripcion')[:50]}...\n"
+        txt += "\n"
+    
+    if len(txt) > 4000:
+        txt = txt[:3900] + "\n... (demasiados productos)"
     
     keyboard = [[InlineKeyboardButton("🔙 Volver", callback_data="menu_store")]]
     
@@ -364,6 +630,7 @@ async def store_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
+# ==================== ELIMINAR PRODUCTO ====================
 async def store_delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -397,7 +664,7 @@ async def store_delete_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         if 0 <= idx < len(data):
             removed = data.pop(idx)
             save_store(data)
-            await query.edit_message_text(f"✅ Producto eliminado: {removed.get('nombre', 'sin nombre')}")
+            await query.edit_message_text(f"✅ Producto eliminado: `{removed.get('nombre', 'sin nombre')}`")
         else:
             await query.edit_message_text("❌ Error: Producto no encontrado")
     except:
@@ -415,7 +682,7 @@ async def menu_keys(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     
     keyboard = [
-        [InlineKeyboardButton("🔑 Generar Keys", callback_data="keys_gen")],
+        [InlineKeyboardButton("🔑 Generar Keys", callback_data="keys_gen_start")],
         [InlineKeyboardButton("📋 Ver Keys", callback_data="keys_list")],
         [InlineKeyboardButton("🗑️ Eliminar Keys", callback_data="keys_del")],
         [InlineKeyboardButton("🔙 Volver", callback_data="back_main")]
@@ -427,18 +694,77 @@ async def menu_keys(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-async def keys_gen(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+# ==================== GENERAR KEYS (SIN COMANDOS) ====================
+async def keys_gen_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    
+    keyboard = [[InlineKeyboardButton("❌ Cancelar", callback_data="keys_cancel")]]
+    
     await query.edit_message_text(
-        "🔑 **Generar Keys**\n\n"
-        "Formato:\n"
-        "`/genkey cantidad`\n\n"
+        "🔑 **GENERAR KEYS**\n\n"
+        "📌 Envía la **cantidad de keys** que deseas generar\n\n"
         "Ejemplo:\n"
-        "`/genkey 5`",
+        "`5`\n"
+        "`10`\n"
+        "`20`\n\n"
+        "🔴 Presiona 'Cancelar' para salir.",
+        reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown"
     )
+    
+    return WAITING_KEYS_COUNT
 
+async def keys_receive_count(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update):
+        return
+    
+    try:
+        n = int(update.message.text.strip())
+    except:
+        await update.message.reply_text("❌ **Cantidad inválida**\n\nEnvía un número válido.\nEjemplo: `5`", parse_mode="Markdown")
+        return WAITING_KEYS_COUNT
+    
+    if n < 1:
+        await update.message.reply_text("❌ La cantidad debe ser mayor a 0")
+        return WAITING_KEYS_COUNT
+    
+    if n > 100:
+        await update.message.reply_text("❌ Máximo 100 keys por vez")
+        return WAITING_KEYS_COUNT
+    
+    keys = load_keys()
+    nuevas = [gen_key() for _ in range(n)]
+    keys.extend(nuevas)
+    save_keys(keys)
+    
+    txt = "\n".join(nuevas)
+    file = io.BytesIO(txt.encode())
+    file.name = "keys.txt"
+    
+    await update.message.reply_document(
+        InputFile(file, filename="keys.txt"),
+        caption=f"✅ **{n} KEYS GENERADAS**\n\n📁 Archivo adjunto con todas las keys.",
+        parse_mode="Markdown"
+    )
+    
+    ctx.user_data.clear()
+    return -1
+
+async def keys_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    ctx.user_data.clear()
+    
+    await query.edit_message_text(
+        "❌ **Operación cancelada**\n\n"
+        "Usa /start para volver al menú principal.",
+        parse_mode="Markdown"
+    )
+    return -1
+
+# ==================== LISTAR KEYS ====================
 async def keys_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -452,6 +778,9 @@ async def keys_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     for i, k in enumerate(keys):
         txt += f"{i+1}. `{k}`\n"
     
+    if len(txt) > 4000:
+        txt = txt[:3900] + "\n... (demasiadas keys)"
+    
     keyboard = [[InlineKeyboardButton("🔙 Volver", callback_data="menu_keys")]]
     
     await query.edit_message_text(
@@ -460,6 +789,7 @@ async def keys_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
+# ==================== ELIMINAR KEYS ====================
 async def keys_del(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -482,7 +812,7 @@ async def keys_del_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     save_keys([])
     await query.edit_message_text("🗑️ Todas las keys eliminadas.")
 
-# ==================== MENÚ ESTADÍSTICAS ====================
+# ==================== ESTADÍSTICAS ====================
 async def menu_stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -512,7 +842,7 @@ async def menu_stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-# ==================== MENÚ INFO ====================
+# ==================== INFO ====================
 async def menu_info(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -529,7 +859,7 @@ async def menu_info(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 👤 Admin: PAPI DEXTER
 
-⚡ Versión 2.0 - Botones interactivos"""
+⚡ Versión 3.0 - Sin comandos, solo conversación"""
     
     keyboard = [[InlineKeyboardButton("🔙 Volver", callback_data="back_main")]]
     
@@ -558,69 +888,7 @@ async def back_main(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-# ==================== COMANDOS DE TEXTO ====================
-async def yt_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update):
-        return
-    if len(ctx.args) < 2:
-        await update.message.reply_text("Uso: /yt link archivo")
-        return
-    
-    try:
-        async with aiohttp.ClientSession() as s:
-            await s.post(API_URL, json={"youtube": ctx.args[0], "file": ctx.args[1]})
-        await update.message.reply_text(f"✅ Video publicado: {ctx.args[1]}")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error: {e}")
-
-async def addstore_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update):
-        return
-    try:
-        texto = " ".join(ctx.args)
-        partes = texto.split("|")
-        if len(partes) < 4:
-            await update.message.reply_text("Uso: /addstore nombre | precio | desc | link")
-            return
-        
-        nombre, precio, desc, link = partes[0].strip(), partes[1].strip(), partes[2].strip(), partes[3].strip()
-        data = load_store()
-        data.append({
-            "nombre": nombre,
-            "precio": precio,
-            "descripcion": desc,
-            "link": link,
-            "imagen": None
-        })
-        save_store(data)
-        await update.message.reply_text(f"✅ Producto creado: {nombre}\n📸 Envía una imagen para el producto.")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error: {e}")
-
-async def genkey_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update):
-        return
-    try:
-        n = int(ctx.args[0]) if ctx.args else 1
-        if n > 100:
-            await update.message.reply_text("❌ Máximo 100 keys por vez")
-            return
-        
-        keys = load_keys()
-        nuevas = [gen_key() for _ in range(n)]
-        keys.extend(nuevas)
-        save_keys(keys)
-        
-        txt = "\n".join(nuevas)
-        file = io.BytesIO(txt.encode())
-        file.name = "keys.txt"
-        
-        await update.message.reply_document(InputFile(file, filename="keys.txt"))
-    except ValueError:
-        await update.message.reply_text("❌ Uso: /genkey cantidad")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error: {e}")
-
+# ==================== FOTO HANDLER ====================
 async def foto_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
         return
@@ -635,11 +903,19 @@ async def foto_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         
         data = load_store()
         if data:
-            data[-1]["imagen"] = "/" + path
-            save_store(data)
-            await update.message.reply_text(f"✅ Imagen guardada")
+            # Buscar el último producto sin imagen
+            for i in range(len(data) - 1, -1, -1):
+                if not data[i].get("imagen"):
+                    data[i]["imagen"] = "/" + path
+                    save_store(data)
+                    await update.message.reply_text(f"✅ Imagen guardada para: `{data[i]['nombre']}`", parse_mode="Markdown")
+                    return
+            
+            await update.message.reply_text("❌ Todos los productos ya tienen imagen")
+            if os.path.exists(path):
+                os.remove(path)
         else:
-            await update.message.reply_text("❌ No hay producto activo")
+            await update.message.reply_text("❌ No hay productos en la tienda")
             if os.path.exists(path):
                 os.remove(path)
     except Exception as e:
@@ -649,11 +925,42 @@ async def foto_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 def setup_bot():
     bot = ApplicationBuilder().token(TOKEN).build()
     
-    # Comandos
+    # Comandos - SOLO /start
     bot.add_handler(CommandHandler("start", start_cmd))
-    bot.add_handler(CommandHandler("yt", yt_cmd))
-    bot.add_handler(CommandHandler("addstore", addstore_cmd))
-    bot.add_handler(CommandHandler("genkey", genkey_cmd))
+    
+    # ===== CONVERSACIÓN: AGREGAR VIDEO =====
+    yt_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(yt_add_start, pattern="^yt_add_start$")],
+        states={
+            WAITING_LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, yt_receive_link)],
+            WAITING_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, yt_receive_name)],
+        },
+        fallbacks=[CallbackQueryHandler(yt_cancel, pattern="^yt_cancel$")]
+    )
+    bot.add_handler(yt_conv)
+    
+    # ===== CONVERSACIÓN: AGREGAR PRODUCTO =====
+    store_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(store_add_start, pattern="^store_add_start$")],
+        states={
+            WAITING_STORE_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, store_receive_name)],
+            WAITING_STORE_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, store_receive_price)],
+            WAITING_STORE_DESC: [MessageHandler(filters.TEXT & ~filters.COMMAND, store_receive_desc)],
+            WAITING_STORE_LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, store_receive_link)],
+        },
+        fallbacks=[CallbackQueryHandler(store_cancel, pattern="^store_cancel$")]
+    )
+    bot.add_handler(store_conv)
+    
+    # ===== CONVERSACIÓN: GENERAR KEYS =====
+    keys_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(keys_gen_start, pattern="^keys_gen_start$")],
+        states={
+            WAITING_KEYS_COUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, keys_receive_count)],
+        },
+        fallbacks=[CallbackQueryHandler(keys_cancel, pattern="^keys_cancel$")]
+    )
+    bot.add_handler(keys_conv)
     
     # Callbacks - Menú Principal
     bot.add_handler(CallbackQueryHandler(menu_yt, pattern="^menu_yt$"))
@@ -663,27 +970,24 @@ def setup_bot():
     bot.add_handler(CallbackQueryHandler(menu_info, pattern="^menu_info$"))
     bot.add_handler(CallbackQueryHandler(back_main, pattern="^back_main$"))
     
-    # Callbacks - YouTube
-    bot.add_handler(CallbackQueryHandler(yt_add, pattern="^yt_add$"))
+    # Callbacks - YouTube (listar, eliminar, limpiar)
     bot.add_handler(CallbackQueryHandler(yt_list, pattern="^yt_list$"))
     bot.add_handler(CallbackQueryHandler(yt_delete, pattern="^yt_delete$"))
     bot.add_handler(CallbackQueryHandler(yt_clear, pattern="^yt_clear$"))
     bot.add_handler(CallbackQueryHandler(yt_delete_confirm, pattern="^del_yt_"))
     bot.add_handler(CallbackQueryHandler(yt_clear_confirm, pattern="^yt_clear_confirm$"))
     
-    # Callbacks - Store
-    bot.add_handler(CallbackQueryHandler(store_add, pattern="^store_add$"))
+    # Callbacks - Store (listar, eliminar)
     bot.add_handler(CallbackQueryHandler(store_list, pattern="^store_list$"))
     bot.add_handler(CallbackQueryHandler(store_delete, pattern="^store_delete$"))
     bot.add_handler(CallbackQueryHandler(store_delete_confirm, pattern="^del_store_"))
     
-    # Callbacks - Keys
-    bot.add_handler(CallbackQueryHandler(keys_gen, pattern="^keys_gen$"))
+    # Callbacks - Keys (listar, eliminar)
     bot.add_handler(CallbackQueryHandler(keys_list, pattern="^keys_list$"))
     bot.add_handler(CallbackQueryHandler(keys_del, pattern="^keys_del$"))
     bot.add_handler(CallbackQueryHandler(keys_del_confirm, pattern="^keys_del_confirm$"))
     
-    # Mensajes
+    # Mensajes - Fotos
     bot.add_handler(MessageHandler(filters.PHOTO, foto_handler))
     
     return bot
@@ -693,15 +997,13 @@ async def run_bot():
     bot = setup_bot()
     await bot.initialize()
     await bot.start()
-    print("✅ Bot iniciado con botones interactivos")
+    print("✅ Bot iniciado - SIN COMANDOS, solo conversación")
     await bot.updater.start_polling()
     await asyncio.Event().wait()
 
 if __name__ == "__main__":
-    # Iniciar bot en hilo separado
     bot_thread = threading.Thread(target=lambda: asyncio.run(run_bot()), daemon=True)
     bot_thread.start()
     
-    # Iniciar Flask
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)

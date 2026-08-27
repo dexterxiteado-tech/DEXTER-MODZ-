@@ -1,123 +1,319 @@
-
 <!DOCTYPE html>
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Posts</title>
+<title>Posts - PAPI DEXTER</title>
 
 <style>
-body{
-    margin:0;
-    background:#0b1220;
-    color:white;
-    font-family:'Segoe UI', sans-serif;
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background: #0b1220;
+    color: white;
+    font-family: 'Segoe UI', sans-serif;
+    min-height: 100vh;
+    padding: 20px;
+}
+
+/* HEADER */
+.header {
+    max-width: 1200px;
+    margin: 0 auto 25px auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid #ff8c00;
+    padding-bottom: 15px;
+}
+
+.header h1 {
+    color: #ff8c00;
+    font-size: 26px;
+}
+
+.header .back {
+    color: #888;
+    text-decoration: none;
+    font-size: 14px;
+    padding: 8px 16px;
+    border: 1px solid #333;
+    border-radius: 8px;
+    transition: 0.3s;
+}
+
+.header .back:hover {
+    border-color: #ff8c00;
+    color: #ff8c00;
 }
 
 /* GRID */
-.container{
-    display:grid;
-    grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
-    gap:20px;
-    padding:15px;
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
 }
 
 /* CARD */
-.post{
-    background:#111827;
-    border-radius:18px;
-    overflow:hidden;
-    transition:0.3s;
-    box-shadow:0 8px 25px rgba(0,0,0,0.6);
+.post {
+    background: #111827;
+    border-radius: 18px;
+    overflow: hidden;
+    transition: 0.3s;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.6);
+    border: 1px solid #1e293b;
 }
 
-/* HOVER */
-.post:hover{
-    transform:translateY(-5px);
-    box-shadow:0 15px 35px rgba(0,0,0,0.9);
+.post:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 35px rgba(0,0,0,0.9);
+    border-color: #ff8c00;
 }
 
 /* IMAGEN */
-.post img{
-    width:100%;
-    height:180px;
-    object-fit:cover;
+.post img {
+    width: 100%;
+    height: 180px;
+    object-fit: cover;
+    background: #0a0a0a;
 }
 
 /* CONTENIDO */
-.content{
-    padding:12px;
+.content {
+    padding: 15px;
 }
 
 /* BADGE */
-.badge{
-    font-size:12px;
-    background:#ff8c00;
-    padding:4px 8px;
-    border-radius:6px;
-    display:inline-block;
-    margin-bottom:8px;
+.badge {
+    font-size: 12px;
+    background: #ff8c00;
+    color: #000;
+    padding: 4px 12px;
+    border-radius: 6px;
+    display: inline-block;
+    margin-bottom: 10px;
+    font-weight: bold;
+}
+
+/* LINKS */
+.links {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 10px 0;
+}
+
+.link-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #0d1520;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid #1e293b;
+    font-size: 12px;
+}
+
+.link-row .icon {
+    font-size: 14px;
+    min-width: 20px;
+}
+
+.link-row .label {
+    color: #666;
+    font-size: 11px;
+    min-width: 55px;
+}
+
+.link-row .value {
+    color: #4fc3f7;
+    word-break: break-all;
+    font-size: 12px;
+}
+
+.link-row .value a {
+    color: #4fc3f7;
+    text-decoration: none;
+}
+
+.link-row .value a:hover {
+    text-decoration: underline;
+    color: #81d4fa;
 }
 
 /* BOTONES */
-.actions{
-    display:flex;
-    gap:8px;
+.actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
 }
 
-/* BOTÓN */
-.btn{
-    flex:1;
-    padding:10px;
-    border-radius:8px;
-    text-align:center;
-    font-size:14px;
-    text-decoration:none;
-    font-weight:bold;
-    transition:0.2s;
+.btn {
+    flex: 1;
+    padding: 10px;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 14px;
+    text-decoration: none;
+    font-weight: bold;
+    transition: 0.2s;
+    border: none;
+    cursor: pointer;
 }
 
-/* VIDEO */
-.yt{
-    background:#ef4444;
-    color:white;
+.btn:active {
+    transform: scale(0.95);
 }
 
-/* DESCARGA */
-.file{
-    background:#22c55e;
-    color:black;
+/* VIDEO - YouTube */
+.btn-yt {
+    background: #ef4444;
+    color: white;
 }
 
-.btn:active{
-    transform:scale(0.95);
+.btn-yt:hover {
+    background: #dc2626;
+}
+
+/* DESCARGA - MediaFire, Mega, etc. */
+.btn-download {
+    background: #22c55e;
+    color: black;
+}
+
+.btn-download:hover {
+    background: #16a34a;
+}
+
+/* VACÍO */
+.empty {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 60px 20px;
+    color: #666;
+}
+
+.empty .big {
+    font-size: 60px;
+    display: block;
+    margin-bottom: 15px;
+}
+
+.empty h2 {
+    color: #888;
+    font-size: 22px;
+}
+
+.empty p {
+    color: #444;
+    font-size: 14px;
+    margin-top: 10px;
+}
+
+/* RESPONSIVE */
+@media (max-width: 600px) {
+    .header {
+        flex-direction: column;
+        gap: 10px;
+        text-align: center;
+    }
+    .header h1 {
+        font-size: 20px;
+    }
+    .container {
+        grid-template-columns: 1fr;
+        padding: 0 5px;
+    }
+    .post img {
+        height: 140px;
+    }
 }
 </style>
 </head>
 
 <body>
 
+<div class="header">
+    <h1>📹 VIDEOS GUARDADOS</h1>
+    <a href="/panel" class="back">🔙 Volver al Panel</a>
+</div>
+
 <div class="container">
 
-{% for p in posts %}
+{% if posts %}
 
-<div class="post">
+    {% for p in posts %}
 
-<img src="{{p.thumbnail}}">
+    <div class="post">
 
-<div class="content">
+        <!-- THUMBNAIL -->
+        <img src="{{ p.thumbnail or 'https://img.youtube.com/vi/default/0.jpg' }}" alt="Thumbnail" loading="lazy">
 
-<span class="badge">🔥 Nuevo</span>
+        <div class="content">
 
-<div class="actions">
-<a class="btn yt" href="{{p.youtube}}" target="_blank">🎬 Ver</a>
-<a class="btn file" href="{{p.file}}" target="_blank">⬇️ Descargar</a>
-</div>
+            <span class="badge">🎬 Video</span>
 
-</div>
+            <!-- LINKS -->
+            <div class="links">
+                <!-- YouTube -->
+                <div class="link-row">
+                    <span class="icon">📹</span>
+                    <span class="label">YT:</span>
+                    <span class="value"><a href="{{ p.youtube }}" target="_blank">{{ p.youtube[:40] }}{% if p.youtube|length > 40 %}...{% endif %}</a></span>
+                </div>
 
-</div>
+                <!-- Descarga (MediaFire, Mega, etc.) -->
+                <div class="link-row">
+                    <span class="icon">📥</span>
+                    <span class="label">Descarga:</span>
+                    <span class="value">
+                        {% if p.download %}
+                            <a href="{{ p.download }}" target="_blank">{{ p.download[:40] }}{% if p.download|length > 40 %}...{% endif %}</a>
+                        {% elif p.file %}
+                            <a href="{{ p.file }}" target="_blank">{{ p.file[:40] }}{% if p.file|length > 40 %}...{% endif %}</a>
+                        {% else %}
+                            <span style="color: #ff6b6b;">❌ No disponible</span>
+                        {% endif %}
+                    </span>
+                </div>
 
-{% endfor %}
+                <!-- ID (opcional) -->
+                {% if p.video_id %}
+                <div class="link-row" style="border-color: #333;">
+                    <span class="icon">🆔</span>
+                    <span class="label">ID:</span>
+                    <span class="value" style="color: #666;">{{ p.video_id }}</span>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- BOTONES -->
+            <div class="actions">
+                <a class="btn btn-yt" href="{{ p.youtube }}" target="_blank">🎬 Ver Video</a>
+                <a class="btn btn-download" href="{{ p.download or p.file }}" target="_blank">⬇️ Descargar</a>
+            </div>
+
+        </div>
+
+    </div>
+
+    {% endfor %}
+
+{% else %}
+
+    <div class="empty">
+        <span class="big">📭</span>
+        <h2>No hay videos guardados</h2>
+        <p>Agrega videos desde el bot de Telegram usando el botón "📥 Agregar Video"</p>
+    </div>
+
+{% endif %}
 
 </div>
 

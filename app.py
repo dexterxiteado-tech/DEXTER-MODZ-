@@ -11,9 +11,6 @@ import re
 import threading
 import shutil
 import hashlib
-import base64
-import hmac
-import binascii
 import requests
 from datetime import timedelta
 from pathlib import Path
@@ -31,7 +28,7 @@ from telegram.ext import (
 
 # ==================== FLASK APP ====================
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "dev_key_mega_bot_2026")
+app.secret_key = os.environ.get("SECRET_KEY", "dev_key_bot_2026")
 app.permanent_session_lifetime = timedelta(minutes=30)
 
 # ==================== CONFIGURACIÓN ====================
@@ -46,10 +43,6 @@ STORE_FILE = "store.json"
 TOKEN = os.environ.get("BOT_TOKEN")
 PUBLIC_URL = os.environ.get("PUBLIC_URL")
 ADMIN_ID = 6841201622
-
-# ==================== CONFIGURACIÓN MEGA ====================
-MEGA_EMAIL = os.environ.get("MEGA_EMAIL", "")
-MEGA_PASSWORD = os.environ.get("MEGA_PASSWORD", "")
 
 # ==================== DIRECTORIOS ====================
 TEMP_DIR = "temp"
@@ -81,20 +74,29 @@ def gen_key():
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=16))
 
 def get_video_id(url):
+    """Extrae el ID de YouTube de una URL"""
     if not url: return None
-    if "v=" in url: return url.split("v=")[1].split("&")[0]
-    if "youtu.be/" in url: return url.split("youtu.be/")[1].split("?")[0]
-    if "youtube.com/shorts/" in url:
-        return url.split("youtube.com/shorts/")[1].split("?")[0]
+    # Patrones de YouTube
+    patterns = [
+        r'(?:youtube\.com\/watch\?v=)([\w-]+)',
+        r'(?:youtu\.be\/)([\w-]+)',
+        r'(?:youtube\.com\/shorts\/)([\w-]+)',
+        r'(?:youtube\.com\/embed\/)([\w-]+)',
+        r'(?:youtube\.com\/v\/)([\w-]+)',
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
     return None
 
 # ==================== FUNCIÓN PARA OBTENER THUMBNAIL ====================
-def get_thumbnail_from_id(video_id):
-    """Obtiene thumbnail de YouTube usando el ID"""
+def download_thumbnail(video_id):
+    """Descarga el thumbnail de YouTube y lo guarda en uploads/"""
     if not video_id:
-        return None, None
+        return None
     
-    # Opciones de thumbnail de YouTube
+    # URLs de thumbnail de YouTube (de mejor a peor calidad)
     thumb_urls = [
         f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg",
         f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
@@ -103,95 +105,47 @@ def get_thumbnail_from_id(video_id):
     
     for url in thumb_urls:
         try:
-            response = requests.get(url, timeout=5)
+            response = requests.get(url, timeout=10)
             if response.status_code == 200:
                 thumb_filename = f"thumb_{video_id}_{int(time.time())}.jpg"
                 thumb_path = os.path.join(UPLOADS_DIR, thumb_filename)
                 with open(thumb_path, 'wb') as f:
                     f.write(response.content)
-                return f"/uploads/{thumb_filename}", thumb_filename
-        except:
+                print(f"✅ Thumbnail descargado: {thumb_filename}")
+                return thumb_filename, f"/uploads/{thumb_filename}"
+        except Exception as e:
+            print(f"Error descargando thumbnail: {e}")
             continue
     
     return None, None
 
-def get_thumbnail_from_url(video_url):
-    """Obtiene thumbnail de YouTube desde URL"""
-    video_id = get_video_id(video_url)
-    if video_id:
-        return get_thumbnail_from_id(video_id)
-    return None, None
-
-# ==================== MEGA API INTEGRADA ====================
-class MegaAPI:
-    """Subida a MEGA usando la API web (sin mega.py)"""
-    
-    def __init__(self, email=None, password=None):
-        self.email = email or MEGA_EMAIL
-        self.password = password or MEGA_PASSWORD
-        self.sid = None
-        self.connected = False
-        self._login()
-    
-    def _login(self):
-        if not self.email or not self.password:
-            print("⚠️ Credenciales MEGA no configuradas")
-            return
-        
-        try:
-            print(f"🔑 Intentando login a MEGA con: {self.email}")
-            self.connected = True
-            self.sid = "MEGA_SESSION"
-            print("✅ Conectado a MEGA (modo API)")
-        except Exception as e:
-            print(f"❌ Error conectando a MEGA: {e}")
-            self.connected = False
-    
-    def upload_file(self, filepath, filename=None):
-        if not self.connected:
-            self._login()
-            if not self.connected:
-                return None, "❌ No se pudo conectar a MEGA"
-        
-        try:
-            if filename is None:
-                filename = os.path.basename(filepath)
-            
-            print(f"📤 Subiendo {filename} a MEGA...")
-            
-            # Leer el archivo
-            with open(filepath, 'rb') as f:
-                file_data = f.read()
-            
-            # Guardar localmente también (fallback)
-            dest_path = os.path.join(UPLOADS_DIR, filename)
-            with open(dest_path, 'wb') as f:
-                f.write(file_data)
-            
-            # Generar enlace local
-            if PUBLIC_URL:
-                link = f"{PUBLIC_URL.rstrip('/')}/uploads/{filename}"
-            else:
-                link = f"http://localhost:5000/uploads/{filename}"
-            
-            print(f"✅ Archivo guardado localmente: {link}")
-            return link, None
-            
-        except Exception as e:
-            print(f"❌ Error subiendo archivo: {e}")
-            return None, f"❌ Error subiendo archivo: {e}"
-
-# ==================== FUNCIÓN DE SUBIDA DIRECTA ====================
-def upload_direct(filepath, filename=None):
+# ==================== FUNCIÓN DE SUBIDA ====================
+def upload_file(filepath, filename=None):
+    """Sube un archivo al servidor y devuelve el enlace"""
     if filename is None:
         filename = os.path.basename(filepath)
+    
+    # Copiar a uploads
     dest_path = os.path.join(UPLOADS_DIR, filename)
+    
+    # Si ya existe, agregar número
+    counter = 1
+    base, ext = os.path.splitext(filename)
+    while os.path.exists(dest_path):
+        new_name = f"{base}_{counter}{ext}"
+        dest_path = os.path.join(UPLOADS_DIR, new_name)
+        filename = new_name
+        counter += 1
+    
     shutil.copy2(filepath, dest_path)
+    
+    # Generar enlace público
     if PUBLIC_URL:
         link = f"{PUBLIC_URL.rstrip('/')}/uploads/{filename}"
     else:
         link = f"http://localhost:5000/uploads/{filename}"
-    return link, None
+    
+    return link, filename
 
 # ==================== SEGURIDAD WEB ====================
 @app.before_request
@@ -266,7 +220,8 @@ def is_admin(update):
 
 # ==================== ESTADOS PARA CONVERSACIONES ====================
 UPLOAD_WAITING_FILE = 1
-DIRECT_WAITING_FILE = 2
+WAITING_YT_LINK = 2
+WAITING_YT_NAME = 3
 
 # ==================== MENÚ PRINCIPAL ====================
 async def start_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -275,9 +230,9 @@ async def start_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
     
     keyboard = [
-        [InlineKeyboardButton("📤 Subir a MEGA", callback_data="mega_upload")],
-        [InlineKeyboardButton("📥 Subida Directa", callback_data="direct_upload")],
-        [InlineKeyboardButton("📹 YouTube", callback_data="menu_yt")],
+        [InlineKeyboardButton("📤 Subir Archivo", callback_data="upload_file")],
+        [InlineKeyboardButton("📹 Agregar Video YouTube", callback_data="yt_add_start")],
+        [InlineKeyboardButton("📋 Ver Videos", callback_data="yt_list")],
         [InlineKeyboardButton("🛒 Tienda", callback_data="menu_store")],
         [InlineKeyboardButton("🔑 Keys", callback_data="menu_keys")],
         [InlineKeyboardButton("📊 Estadísticas", callback_data="menu_stats")],
@@ -286,15 +241,16 @@ async def start_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(
         "🤖 **PAPI DEXTER BOT**\n\n"
-        "📤 **Sube archivos a MEGA**\n"
-        "📥 Obtén enlaces de descarga\n\n"
+        "📤 **Sube archivos a tu web**\n"
+        "📥 Obtén enlaces directos\n\n"
+        f"📁 **Dominio:** {PUBLIC_URL or 'localhost'}\n\n"
         "Selecciona una opción:",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown"
     )
 
-# ==================== MEGA UPLOAD ====================
-async def mega_upload_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+# ==================== SUBIR ARCHIVO ====================
+async def upload_file_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
@@ -303,13 +259,15 @@ async def mega_upload_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("❌ Cancelar", callback_data="upload_cancel")]]
     
     await query.edit_message_text(
-        "📤 **SUBIR A MEGA**\n\n"
+        "📤 **SUBIR ARCHIVO**\n\n"
         "📌 Envía el archivo que quieras subir\n\n"
         "Puedes enviar:\n"
         "• 📁 Archivo cualquiera\n"
         "• 📷 Imagen\n"
         "• 🎬 Video\n"
         "• 📦 ZIP\n\n"
+        "📁 Se guardará en tu web:\n"
+        f"`{PUBLIC_URL or 'localhost'}/uploads/`\n\n"
         "🔴 Presiona 'Cancelar' para salir.",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown"
@@ -317,7 +275,7 @@ async def mega_upload_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     
     return UPLOAD_WAITING_FILE
 
-async def mega_receive_file(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+async def receive_file(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
         return ConversationHandler.END
     
@@ -337,7 +295,7 @@ async def mega_receive_file(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Archivo no soportado")
         return UPLOAD_WAITING_FILE
     
-    await update.message.reply_text("📥 Descargando archivo...")
+    await update.message.reply_text("📥 Procesando archivo...")
     
     try:
         if hasattr(file_obj, 'get_file'):
@@ -348,168 +306,29 @@ async def mega_receive_file(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         temp_path = os.path.join(TEMP_DIR, file_name)
         await file.download_to_drive(temp_path)
         
-        size_mb = os.path.getsize(temp_path) / (1024 * 1024)
-        
-        await update.message.reply_text(f"📤 Subiendo `{file_name}` a MEGA...", parse_mode="Markdown")
-        
-        mega = MegaAPI()
-        link, error = mega.upload_file(temp_path, file_name)
-        
-        if error:
-            await update.message.reply_text(f"⚠️ {error}")
-            return ConversationHandler.END
-        
-        # ===== GENERAR THUMBNAIL =====
-        thumb_url = None
-        thumb_filename = None
-        
-        # Intentar obtener thumbnail si es video
-        if file_name.endswith(('.mp4', '.mkv', '.webm', '.avi', '.mov')):
-            # Buscar el ID en el nombre o usar método alternativo
-            video_id = get_video_id(file_name)
-            if video_id:
-                thumb_url, thumb_filename = get_thumbnail_from_id(video_id)
-        
-        keyboard = [
-            [InlineKeyboardButton("🔗 Abrir Enlace", url=link)],
-            [InlineKeyboardButton("📤 Subir otro", callback_data="mega_upload")],
-            [InlineKeyboardButton("🔙 Volver", callback_data="back_main")]
-        ]
-        
-        message_text = (
-            f"✅ **ARCHIVO SUBIDO**\n\n"
-            f"📁 **Nombre:** `{file_name}`\n"
-            f"📦 **Tamaño:** {size_mb:.2f} MB\n"
-            f"🔗 **Enlace:** [Descargar]({link})\n\n"
-            f"📌 Guarda este enlace."
-        )
-        
-        # Enviar con thumbnail si existe
-        if thumb_url and os.path.exists(os.path.join('.', thumb_url.lstrip('/'))):
-            with open(os.path.join('.', thumb_url.lstrip('/')), 'rb') as f:
-                await update.message.reply_photo(
-                    photo=InputFile(f),
-                    caption=message_text,
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode="Markdown"
-                )
-        else:
-            await update.message.reply_text(
-                message_text,
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode="Markdown"
-            )
+        # Subir al servidor
+        link, final_name = upload_file(temp_path, file_name)
         
         if os.path.exists(temp_path):
             os.remove(temp_path)
         
-        ctx.user_data.clear()
-        return ConversationHandler.END
-        
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error: {e}")
-        ctx.user_data.clear()
-        return ConversationHandler.END
-
-# ==================== SUBIDA DIRECTA ====================
-async def direct_upload_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    
-    ctx.user_data.clear()
-    
-    keyboard = [[InlineKeyboardButton("❌ Cancelar", callback_data="upload_cancel")]]
-    
-    await query.edit_message_text(
-        "📥 **SUBIDA DIRECTA**\n\n"
-        "📌 Envía el archivo para subirlo al servidor\n\n"
-        "Obtendrás un enlace directo.\n\n"
-        "🔴 Presiona 'Cancelar' para salir.",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="Markdown"
-    )
-    
-    return DIRECT_WAITING_FILE
-
-async def direct_receive_file(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update):
-        return ConversationHandler.END
-    
-    file_obj = None
-    file_name = None
-    
-    if update.message.document:
-        file_obj = update.message.document
-        file_name = file_obj.file_name
-    elif update.message.photo:
-        file_obj = await update.message.photo[-1].get_file()
-        file_name = f"foto_{int(time.time())}.jpg"
-    elif update.message.video:
-        file_obj = update.message.video
-        file_name = f"video_{int(time.time())}.mp4"
-    else:
-        await update.message.reply_text("❌ Archivo no soportado")
-        return DIRECT_WAITING_FILE
-    
-    await update.message.reply_text("📥 Guardando archivo...")
-    
-    try:
-        if hasattr(file_obj, 'get_file'):
-            file = await file_obj.get_file()
-        else:
-            file = file_obj
-        
-        temp_path = os.path.join(TEMP_DIR, file_name)
-        await file.download_to_drive(temp_path)
-        
-        link, error = upload_direct(temp_path, file_name)
-        
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-        
-        if error:
-            await update.message.reply_text(f"❌ {error}")
-            return ConversationHandler.END
-        
-        size_mb = os.path.getsize(os.path.join(UPLOADS_DIR, file_name)) / (1024 * 1024)
-        
-        # ===== GENERAR THUMBNAIL =====
-        thumb_url = None
-        thumb_filename = None
-        
-        if file_name.endswith(('.mp4', '.mkv', '.webm', '.avi', '.mov')):
-            video_id = get_video_id(file_name)
-            if video_id:
-                thumb_url, thumb_filename = get_thumbnail_from_id(video_id)
+        size_mb = os.path.getsize(os.path.join(UPLOADS_DIR, final_name)) / (1024 * 1024)
         
         keyboard = [
             [InlineKeyboardButton("🔗 Abrir Enlace", url=link)],
-            [InlineKeyboardButton("📤 Subir otro", callback_data="direct_upload")],
+            [InlineKeyboardButton("📤 Subir otro", callback_data="upload_file")],
             [InlineKeyboardButton("🔙 Volver", callback_data="back_main")]
         ]
         
-        message_text = (
+        await update.message.reply_text(
             f"✅ **ARCHIVO SUBIDO**\n\n"
-            f"📁 **Nombre:** `{file_name}`\n"
+            f"📁 **Nombre:** `{final_name}`\n"
             f"📦 **Tamaño:** {size_mb:.2f} MB\n"
             f"🔗 **Enlace:** [Descargar]({link})\n\n"
-            f"📌 Guarda este enlace."
+            f"📌 Guarda este enlace.",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown"
         )
-        
-        if thumb_url and os.path.exists(os.path.join('.', thumb_url.lstrip('/'))):
-            with open(os.path.join('.', thumb_url.lstrip('/')), 'rb') as f:
-                await update.message.reply_photo(
-                    photo=InputFile(f),
-                    caption=message_text,
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode="Markdown"
-                )
-        else:
-            await update.message.reply_text(
-                message_text,
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode="Markdown"
-            )
         
         ctx.user_data.clear()
         return ConversationHandler.END
@@ -526,94 +345,182 @@ async def upload_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text("❌ Subida cancelada", parse_mode="Markdown")
     return ConversationHandler.END
 
-# ==================== MENÚ YOUTUBE ====================
-async def menu_yt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+# ==================== YOUTUBE CON THUMBNAIL ====================
+async def yt_add_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
-    keyboard = [
-        [InlineKeyboardButton("📥 Agregar Video", callback_data="yt_add")],
-        [InlineKeyboardButton("📋 Listar Videos", callback_data="yt_list")],
-        [InlineKeyboardButton("🗑️ Eliminar Video", callback_data="yt_delete")],
-        [InlineKeyboardButton("🧹 Limpiar Todo", callback_data="yt_clear")],
-        [InlineKeyboardButton("🔙 Volver", callback_data="back_main")]
-    ]
+    ctx.user_data.clear()
+    
+    keyboard = [[InlineKeyboardButton("❌ Cancelar", callback_data="yt_cancel")]]
     
     await query.edit_message_text(
-        "📹 **GESTIÓN DE VIDEOS**\n\nSelecciona una acción:",
+        "📹 **AGREGAR VIDEO DE YOUTUBE**\n\n"
+        "📌 **PASO 1:** Envía el **link de YouTube**\n\n"
+        "Ejemplos:\n"
+        "`https://youtu.be/xxxxx`\n"
+        "`https://www.youtube.com/watch?v=xxxxx`\n"
+        "`https://youtube.com/shorts/xxxxx`\n\n"
+        "🖼️ **El thumbnail se descargará automáticamente**\n\n"
+        "🔴 Presiona 'Cancelar' para salir.",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown"
     )
+    
+    return WAITING_YT_LINK
 
-async def yt_add(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+async def yt_receive_link(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update):
+        return ConversationHandler.END
+    
+    url = update.message.text.strip()
+    video_id = get_video_id(url)
+    
+    if not video_id:
+        await update.message.reply_text(
+            "❌ **Link inválido**\n\n"
+            "Envía un link válido de YouTube.\n"
+            "Ejemplo: `https://youtu.be/xxxxx`",
+            parse_mode="Markdown"
+        )
+        return WAITING_YT_LINK
+    
+    ctx.user_data['yt_url'] = url
+    ctx.user_data['yt_id'] = video_id
+    
+    # Descargar thumbnail
+    await update.message.reply_text(f"🖼️ Descargando thumbnail para `{video_id}`...", parse_mode="Markdown")
+    
+    thumb_filename, thumb_url = download_thumbnail(video_id)
+    ctx.user_data['thumb_filename'] = thumb_filename
+    ctx.user_data['thumb_url'] = thumb_url
+    
+    keyboard = [[InlineKeyboardButton("❌ Cancelar", callback_data="yt_cancel")]]
+    
+    if thumb_url:
+        await update.message.reply_photo(
+            photo=thumb_url,
+            caption=f"✅ **Thumbnail descargado**\n\n"
+                    f"📌 **PASO 2:** Envía el **nombre del archivo**\n\n"
+                    f"Ejemplo:\n"
+                    f"`video_skin`\n\n"
+                    f"📁 Se guardará como: `video_skin.unity3d`",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown"
+        )
+    else:
+        await update.message.reply_text(
+            f"⚠️ No se pudo descargar el thumbnail\n\n"
+            f"📌 **PASO 2:** Envía el **nombre del archivo**\n\n"
+            f"Ejemplo:\n"
+            f"`video_skin`",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown"
+        )
+    
+    return WAITING_YT_NAME
+
+async def yt_receive_name(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update):
+        return ConversationHandler.END
+    
+    name = update.message.text.strip()
+    
+    if not name or len(name) < 2:
+        await update.message.reply_text("❌ Nombre inválido (mínimo 2 caracteres)")
+        return WAITING_YT_NAME
+    
+    url = ctx.user_data.get('yt_url')
+    video_id = ctx.user_data.get('yt_id')
+    thumb_filename = ctx.user_data.get('thumb_filename')
+    thumb_url = ctx.user_data.get('thumb_url')
+    
+    # Guardar en posts
+    posts = load_posts()
+    posts.append({
+        "youtube": url,
+        "file": name,
+        "video_id": video_id,
+        "thumbnail": thumb_url,
+        "thumb_filename": thumb_filename,
+        "created": time.time()
+    })
+    save_posts(posts)
+    
+    keyboard = [
+        [InlineKeyboardButton("📹 Ver Videos", callback_data="yt_list")],
+        [InlineKeyboardButton("📤 Agregar otro", callback_data="yt_add_start")],
+        [InlineKeyboardButton("🔙 Volver", callback_data="back_main")]
+    ]
+    
+    message_text = (
+        f"✅ **VIDEO AGREGADO**\n\n"
+        f"📹 **Link:** {url}\n"
+        f"📁 **Archivo:** `{name}`\n"
+        f"🖼️ **Thumbnail:** {thumb_url or 'No disponible'}\n\n"
+        f"📌 El thumbnail se mostrará en la lista de videos."
+    )
+    
+    if thumb_url:
+        await update.message.reply_photo(
+            photo=thumb_url,
+            caption=message_text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown"
+        )
+    else:
+        await update.message.reply_text(
+            message_text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown"
+        )
+    
+    ctx.user_data.clear()
+    return ConversationHandler.END
+
+async def yt_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    await query.edit_message_text(
-        "📥 **Agregar Video**\n\n"
-        "Formato:\n"
-        "`/yt link_youtube nombre`\n\n"
-        "Ejemplo:\n"
-        "`/yt https://youtu.be/xxxxx video1`",
-        parse_mode="Markdown"
-    )
+    ctx.user_data.clear()
+    await query.edit_message_text("❌ Operación cancelada", parse_mode="Markdown")
+    return ConversationHandler.END
 
 async def yt_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    
     posts = load_posts()
     if not posts:
-        await query.edit_message_text("📋 No hay videos.")
+        await query.edit_message_text("📋 No hay videos guardados.")
         return
-    txt = "📋 **VIDEOS:**\n\n"
+    
+    # Mostrar videos con thumbnail
     for i, p in enumerate(posts):
-        txt += f"{i}. `{p.get('file', 'sin nombre')}`\n"
-    keyboard = [[InlineKeyboardButton("🔙 Volver", callback_data="menu_yt")]]
-    await query.edit_message_text(txt, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
-
-async def yt_delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    posts = load_posts()
-    if not posts:
-        await query.edit_message_text("📋 No hay videos.")
-        return
-    keyboard = []
-    for i, p in enumerate(posts):
-        keyboard.append([InlineKeyboardButton(f"🗑️ {i} - {p.get('file', 'video')[:20]}", callback_data=f"del_yt_{i}")])
-    keyboard.append([InlineKeyboardButton("🔙 Volver", callback_data="menu_yt")])
-    await query.edit_message_text("🗑️ **SELECCIONA VIDEO:**", reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def yt_delete_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    try:
-        idx = int(query.data.split("_")[2])
-        posts = load_posts()
-        if 0 <= idx < len(posts):
-            removed = posts.pop(idx)
-            save_posts(posts)
-            await query.edit_message_text(f"✅ Eliminado: `{removed.get('file')}`")
+        thumb = p.get('thumbnail')
+        name = p.get('file', 'sin nombre')
+        url = p.get('youtube', 'sin link')
+        
+        message = f"📹 **{i}. {name}**\n\n🔗 {url}"
+        
+        if thumb and os.path.exists(os.path.join('.', thumb.lstrip('/'))):
+            try:
+                with open(os.path.join('.', thumb.lstrip('/')), 'rb') as f:
+                    await query.message.reply_photo(
+                        photo=InputFile(f),
+                        caption=message,
+                        parse_mode="Markdown"
+                    )
+            except:
+                await query.message.reply_text(message, parse_mode="Markdown")
         else:
-            await query.edit_message_text("❌ Error")
-    except:
-        await query.edit_message_text("❌ Error")
-    keyboard = [[InlineKeyboardButton("🔙 Volver", callback_data="menu_yt")]]
-    await query.edit_message_text("🗑️ **ELIMINADO**", reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def yt_clear(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    keyboard = [
-        [InlineKeyboardButton("✅ SI", callback_data="yt_clear_confirm")],
-        [InlineKeyboardButton("❌ NO", callback_data="menu_yt")]
-    ]
-    await query.edit_message_text("⚠️ **¿ELIMINAR TODOS?**", reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def yt_clear_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    save_posts([])
-    await query.edit_message_text("🧹 Todos eliminados.")
+            await query.message.reply_text(message, parse_mode="Markdown")
+    
+    keyboard = [[InlineKeyboardButton("🔙 Volver", callback_data="back_main")]]
+    await query.message.reply_text(
+        "📋 **FIN DE LA LISTA**",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
 
 # ==================== MENÚ TIENDA ====================
 async def menu_store(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -753,7 +660,9 @@ async def menu_stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 📹 Videos: {posts}
 🛒 Productos: {store}
 🔑 Keys: {keys}
-⏱️ Uptime: {hours}h {minutes}m"""
+⏱️ Uptime: {hours}h {minutes}m
+
+📁 Archivos en: `{PUBLIC_URL or 'localhost'}/uploads/`"""
     
     keyboard = [[InlineKeyboardButton("🔙 Volver", callback_data="back_main")]]
     await query.edit_message_text(txt, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
@@ -765,16 +674,17 @@ async def menu_info(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     
     txt = """ℹ️ **PAPI DEXTER BOT**
 
-🤖 Bot con MEGA integrado
+🤖 Bot de gestión de archivos
 
 📌 **Funciones:**
-• 📤 Subir a MEGA
-• 📥 Subida Directa
-• 📹 Gestión de videos
+• 📤 Subir archivos a tu web
+• 📹 Agregar videos de YouTube (con thumbnail)
 • 🛒 Tienda
 • 🔑 Keys
 
-⚡ Versión 5.0 - MEGA Integrado + Thumbnails"""
+📁 **Tu web:** `{PUBLIC_URL or 'localhost'}`
+
+⚡ Versión 6.0 - Con Thumbnails de YouTube"""
     
     keyboard = [[InlineKeyboardButton("🔙 Volver", callback_data="back_main")]]
     await query.edit_message_text(txt, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
@@ -785,9 +695,9 @@ async def back_main(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     
     keyboard = [
-        [InlineKeyboardButton("📤 Subir a MEGA", callback_data="mega_upload")],
-        [InlineKeyboardButton("📥 Subida Directa", callback_data="direct_upload")],
-        [InlineKeyboardButton("📹 YouTube", callback_data="menu_yt")],
+        [InlineKeyboardButton("📤 Subir Archivo", callback_data="upload_file")],
+        [InlineKeyboardButton("📹 Agregar Video YouTube", callback_data="yt_add_start")],
+        [InlineKeyboardButton("📋 Ver Videos", callback_data="yt_list")],
         [InlineKeyboardButton("🛒 Tienda", callback_data="menu_store")],
         [InlineKeyboardButton("🔑 Keys", callback_data="menu_keys")],
         [InlineKeyboardButton("📊 Estadísticas", callback_data="menu_stats")],
@@ -795,7 +705,10 @@ async def back_main(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ]
     
     await query.edit_message_text(
-        "🤖 **PAPI DEXTER BOT**\n\nSelecciona una opción:",
+        "🤖 **PAPI DEXTER BOT**\n\n"
+        "📤 **Sube archivos a tu web**\n"
+        "📥 Obtén enlaces directos\n\n"
+        "Selecciona una opción:",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown"
     )
@@ -808,7 +721,16 @@ async def yt_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
     try:
         posts = load_posts()
-        posts.append({"youtube": ctx.args[0], "file": ctx.args[1]})
+        video_id = get_video_id(ctx.args[0])
+        thumb_filename, thumb_url = download_thumbnail(video_id) if video_id else (None, None)
+        posts.append({
+            "youtube": ctx.args[0],
+            "file": ctx.args[1],
+            "video_id": video_id,
+            "thumbnail": thumb_url,
+            "thumb_filename": thumb_filename,
+            "created": time.time()
+        })
         save_posts(posts)
         await update.message.reply_text(f"✅ Video: {ctx.args[1]}")
     except Exception as e:
@@ -856,14 +778,14 @@ def setup_bot():
     bot.add_handler(CommandHandler("addstore", addstore_cmd))
     bot.add_handler(CommandHandler("genkey", genkey_cmd))
     
-    # MEGA Upload
+    # Subir Archivo
     upload_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(mega_upload_start, pattern="^mega_upload$")],
+        entry_points=[CallbackQueryHandler(upload_file_start, pattern="^upload_file$")],
         states={
             UPLOAD_WAITING_FILE: [
-                MessageHandler(filters.Document.ALL, mega_receive_file),
-                MessageHandler(filters.PHOTO, mega_receive_file),
-                MessageHandler(filters.VIDEO, mega_receive_file),
+                MessageHandler(filters.Document.ALL, receive_file),
+                MessageHandler(filters.PHOTO, receive_file),
+                MessageHandler(filters.VIDEO, receive_file),
             ],
         },
         fallbacks=[CallbackQueryHandler(upload_cancel, pattern="^upload_cancel$")],
@@ -871,35 +793,25 @@ def setup_bot():
     )
     bot.add_handler(upload_conv)
     
-    # Direct Upload
-    direct_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(direct_upload_start, pattern="^direct_upload$")],
+    # YouTube con Thumbnail
+    yt_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(yt_add_start, pattern="^yt_add_start$")],
         states={
-            DIRECT_WAITING_FILE: [
-                MessageHandler(filters.Document.ALL, direct_receive_file),
-                MessageHandler(filters.PHOTO, direct_receive_file),
-                MessageHandler(filters.VIDEO, direct_receive_file),
-            ],
+            WAITING_YT_LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, yt_receive_link)],
+            WAITING_YT_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, yt_receive_name)],
         },
-        fallbacks=[CallbackQueryHandler(upload_cancel, pattern="^upload_cancel$")],
+        fallbacks=[CallbackQueryHandler(yt_cancel, pattern="^yt_cancel$")],
         allow_reentry=True
     )
-    bot.add_handler(direct_conv)
+    bot.add_handler(yt_conv)
     
     # Callbacks
-    bot.add_handler(CallbackQueryHandler(menu_yt, pattern="^menu_yt$"))
+    bot.add_handler(CallbackQueryHandler(yt_list, pattern="^yt_list$"))
     bot.add_handler(CallbackQueryHandler(menu_store, pattern="^menu_store$"))
     bot.add_handler(CallbackQueryHandler(menu_keys, pattern="^menu_keys$"))
     bot.add_handler(CallbackQueryHandler(menu_stats, pattern="^menu_stats$"))
     bot.add_handler(CallbackQueryHandler(menu_info, pattern="^menu_info$"))
     bot.add_handler(CallbackQueryHandler(back_main, pattern="^back_main$"))
-    
-    bot.add_handler(CallbackQueryHandler(yt_add, pattern="^yt_add$"))
-    bot.add_handler(CallbackQueryHandler(yt_list, pattern="^yt_list$"))
-    bot.add_handler(CallbackQueryHandler(yt_delete, pattern="^yt_delete$"))
-    bot.add_handler(CallbackQueryHandler(yt_clear, pattern="^yt_clear$"))
-    bot.add_handler(CallbackQueryHandler(yt_delete_confirm, pattern="^del_yt_"))
-    bot.add_handler(CallbackQueryHandler(yt_clear_confirm, pattern="^yt_clear_confirm$"))
     
     bot.add_handler(CallbackQueryHandler(store_add, pattern="^store_add$"))
     bot.add_handler(CallbackQueryHandler(store_list, pattern="^store_list$"))
@@ -918,7 +830,7 @@ async def run_bot():
     bot = setup_bot()
     await bot.initialize()
     await bot.start()
-    print("✅ Bot iniciado con MEGA integrado y Thumbnails")
+    print(f"✅ Bot iniciado - Archivos en: {PUBLIC_URL or 'localhost'}/uploads/")
     await bot.updater.start_polling()
     await asyncio.Event().wait()
 

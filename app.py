@@ -12,7 +12,7 @@ import threading
 import shutil
 import hashlib
 import requests
-from datetime import timedelta
+from datetime import timedelta, datetime
 from pathlib import Path
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
@@ -167,6 +167,16 @@ def get_file_list(folder):
                 files.append(f)
     return sorted(files)
 
+# ==================== FILTRO PARA FECHAS ====================
+@app.template_filter('timestamp_to_datetime')
+def timestamp_to_datetime(timestamp):
+    if not timestamp:
+        return "Fecha desconocida"
+    try:
+        return datetime.fromtimestamp(timestamp).strftime("%d/%m/%Y %H:%M")
+    except:
+        return "Fecha inválida"
+
 # ==================== SEGURIDAD WEB ====================
 @app.before_request
 def proteger():
@@ -228,12 +238,37 @@ def posts():
 def store():
     return render_template("store.html", productos=load_store())
 
-@app.route("/suggestions")
+@app.route("/suggestions", methods=["GET", "POST"])
 def suggestions():
-    sugerencias = load_suggestions()
+    if request.method == "POST":
+        nombre = request.form.get("nombre", "Anónimo").strip()
+        mensaje = request.form.get("mensaje", "").strip()
+        
+        if not mensaje:
+            return render_template(
+                "suggestions.html",
+                sugerencias=load_suggestions(),
+                error="❌ El mensaje no puede estar vacío"
+            )
+        
+        sugerencias = load_suggestions()
+        sugerencias.append({
+            "usuario": nombre or "Anónimo",
+            "mensaje": mensaje,
+            "fecha": time.time(),
+            "estado": "pendiente"
+        })
+        save_suggestions(sugerencias)
+        
+        return render_template(
+            "suggestions.html",
+            sugerencias=load_suggestions(),
+            success="✅ ¡Gracias por tu sugerencia!"
+        )
+    
     return render_template(
         "suggestions.html",
-        sugerencias=sugerencias
+        sugerencias=load_suggestions()
     )
 
 @app.route("/gato")
@@ -270,13 +305,12 @@ async def show_main_menu(update_or_query, ctx):
         [InlineKeyboardButton("📹 YouTube", callback_data="menu_yt")],
         [InlineKeyboardButton("🛒 Tienda", callback_data="menu_store")],
         [InlineKeyboardButton("🔑 Keys", callback_data="menu_keys")],
-        [InlineKeyboardButton("💡 Sugerencia / Suggestion", callback_data="menu_suggestions")],
         [InlineKeyboardButton("📊 Estadísticas", callback_data="menu_stats")],
         [InlineKeyboardButton("🌐 Mi Web", url=web_url)],
         [InlineKeyboardButton("ℹ️ Info", callback_data="menu_info")]
     ]
     
-    message = f"🤖 **PAPI DEXTER BOT**\n\n🌐 **Web:** {web_url}\n\n📤 **Sube archivos a tu web**\n📹 **Agrega videos de YouTube**\n💡 **Envía sugerencias**\n\nSelecciona una opción:"
+    message = f"🤖 **PAPI DEXTER BOT**\n\n🌐 **Web:** {web_url}\n\n📤 **Sube archivos a tu web**\n📹 **Agrega videos de YouTube**\n\nSelecciona una opción:"
     
     if hasattr(update_or_query, 'message'):
         await update_or_query.message.reply_text(
@@ -1222,167 +1256,6 @@ async def keys_del_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await asyncio.sleep(1)
     await menu_keys(update, ctx)
 
-# ==================== SUGERENCIAS / SUGGESTIONS ====================
-async def suggestion_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Comando /sugerencia - Recibe sugerencias de usuarios"""
-    texto = " ".join(ctx.args)
-    
-    if not texto:
-        await update.message.reply_text(
-            "📝 **Envíame tu sugerencia**\n\n"
-            "Ejemplo:\n"
-            "`/sugerencia Me gustaría que el bot tenga más colores`\n\n"
-            "O usa el botón en el menú principal.\n\n"
-            "💡 **Suggestion in English:**\n"
-            "`/suggestion I would like the bot to have more colors`",
-            parse_mode="Markdown"
-        )
-        return
-    
-    # Guardar sugerencia
-    sugerencias = load_suggestions()
-    sugerencias.append({
-        "usuario": update.effective_user.username or update.effective_user.first_name or "Anónimo",
-        "user_id": update.effective_user.id,
-        "mensaje": texto,
-        "fecha": time.time(),
-        "estado": "pendiente"
-    })
-    save_suggestions(sugerencias)
-    
-    await update.message.reply_text(
-        "✅ **¡Gracias por tu sugerencia!**\n\n"
-        "Tu opinión es importante para mejorar el bot.\n"
-        "📌 La revisaremos pronto.\n\n"
-        "💡 **Thank you for your suggestion!**\n"
-        "Your feedback helps us improve the bot.",
-        parse_mode="Markdown"
-    )
-
-# ==================== MENÚ SUGERENCIAS ====================
-async def menu_suggestions(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    
-    keyboard = [
-        [InlineKeyboardButton("📝 Enviar Sugerencia", callback_data="suggest_send")],
-        [InlineKeyboardButton("📋 Ver Sugerencias (Admin)", callback_data="suggest_list")],
-        [InlineKeyboardButton("🗑️ Eliminar Sugerencia (Admin)", callback_data="suggest_delete")],
-        [InlineKeyboardButton("🔙 Menú Principal", callback_data="back_main")]
-    ]
-    
-    await query.edit_message_text(
-        "💡 **SUGERENCIAS / SUGGESTIONS**\n\n"
-        "• 📝 Envía tu sugerencia para mejorar el bot\n"
-        "• 📋 Ver todas las sugerencias (admin)\n"
-        "• 🗑️ Eliminar sugerencias (admin)\n\n"
-        "Selecciona una acción:",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="Markdown"
-    )
-
-async def suggest_send(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    
-    await query.edit_message_text(
-        "📝 **ENVIAR SUGERENCIA**\n\n"
-        "Escribe tu sugerencia con el comando:\n\n"
-        "🇪🇸 `/sugerencia Tu sugerencia aquí`\n\n"
-        "🇬🇧 `/suggestion Your suggestion here`\n\n"
-        "Ejemplo:\n"
-        "`/sugerencia Me gustaría que el bot tenga más colores`",
-        parse_mode="Markdown"
-    )
-
-async def suggest_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    
-    if not is_admin(update):
-        await query.edit_message_text("⛔ Solo administradores pueden ver todas las sugerencias.")
-        await asyncio.sleep(1)
-        await menu_suggestions(update, ctx)
-        return
-    
-    sugerencias = load_suggestions()
-    if not sugerencias:
-        await query.edit_message_text("📋 No hay sugerencias.")
-        await asyncio.sleep(1.5)
-        await menu_suggestions(update, ctx)
-        return
-    
-    txt = "💡 **SUGERENCIAS:**\n\n"
-    for i, s in enumerate(sugerencias):
-        estado = s.get('estado', 'pendiente')
-        emoji = "🟡" if estado == "pendiente" else "🟢" if estado == "leido" else "🔵"
-        mensaje = s.get('mensaje', 'sin mensaje')
-        usuario = s.get('usuario', 'anónimo')
-        if len(mensaje) > 40:
-            mensaje = mensaje[:40] + "..."
-        txt += f"{emoji} **{i}.** {mensaje}\n"
-        txt += f"   👤 {usuario}\n\n"
-    
-    if len(txt) > 4000:
-        txt = txt[:3900] + "\n... (demasiadas sugerencias)"
-    
-    keyboard = [[InlineKeyboardButton("🔙 Volver", callback_data="menu_suggestions")]]
-    
-    await query.edit_message_text(
-        txt,
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="Markdown"
-    )
-
-async def suggest_delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    
-    if not is_admin(update):
-        await query.edit_message_text("⛔ Solo administradores pueden eliminar sugerencias.")
-        await asyncio.sleep(1)
-        await menu_suggestions(update, ctx)
-        return
-    
-    sugerencias = load_suggestions()
-    if not sugerencias:
-        await query.edit_message_text("📋 No hay sugerencias para eliminar.")
-        await asyncio.sleep(1.5)
-        await menu_suggestions(update, ctx)
-        return
-    
-    keyboard = []
-    for i, s in enumerate(sugerencias):
-        mensaje = s.get('mensaje', 'sin mensaje')[:20]
-        keyboard.append([InlineKeyboardButton(f"🗑️ {i} - {mensaje}...", callback_data=f"del_sugg_{i}")])
-    keyboard.append([InlineKeyboardButton("🔙 Volver", callback_data="menu_suggestions")])
-    
-    await query.edit_message_text(
-        "🗑️ **SELECCIONA SUGERENCIA A ELIMINAR:**",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="Markdown"
-    )
-
-async def suggest_delete_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    
-    try:
-        idx = int(query.data.split("_")[2])
-        sugerencias = load_suggestions()
-        
-        if 0 <= idx < len(sugerencias):
-            removed = sugerencias.pop(idx)
-            save_suggestions(sugerencias)
-            await query.edit_message_text(f"✅ Sugerencia eliminada.")
-        else:
-            await query.edit_message_text("❌ Error")
-    except:
-        await query.edit_message_text("❌ Error")
-    
-    await asyncio.sleep(1)
-    await menu_suggestions(update, ctx)
-
 # ==================== ESTADÍSTICAS ====================
 async def menu_stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1391,8 +1264,6 @@ async def menu_stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     posts = len(load_posts())
     store = len(load_store())
     keys = len(load_keys())
-    sugerencias = len(load_suggestions())
-    sugerencias_pendientes = sum(1 for s in load_suggestions() if s.get('estado') == 'pendiente')
     files = get_file_list(UPLOADS_DIR)
     total_size = sum(os.path.getsize(os.path.join(UPLOADS_DIR, f)) for f in files)
     total_mb = total_size / (1024 * 1024)
@@ -1408,7 +1279,6 @@ async def menu_stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 📹 Videos: {posts}
 🛒 Productos: {store}
 🔑 Keys: {keys}
-💡 Sugerencias: {sugerencias} ({sugerencias_pendientes} pendientes)
 
 📁 **Archivos subidos:** {len(files)}
 📦 **Espacio usado:** {total_mb:.2f} MB
@@ -1442,11 +1312,10 @@ async def menu_info(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 • 📹 Gestión de videos (thumbnail automático + link descarga)
 • 🛒 Tienda (con imágenes)
 • 🔑 Keys (hasta 5000)
-• 💡 Sugerencias / Suggestions
 
 🌐 **Web:** {web_url}
 
-⚡ Versión 8.0 - Con Sugerencias"""
+⚡ Versión 8.0"""
     
     keyboard = [[InlineKeyboardButton("🔙 Volver", callback_data="back_main")]]
     
@@ -1466,10 +1335,7 @@ async def back_main(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 def setup_bot():
     bot = ApplicationBuilder().token(TOKEN).build()
     
-    # Comandos
     bot.add_handler(CommandHandler("start", start_cmd))
-    bot.add_handler(CommandHandler("sugerencia", suggestion_cmd))
-    bot.add_handler(CommandHandler("suggestion", suggestion_cmd))
     
     # ===== SUBIR ARCHIVO CON OPCIÓN DE BORRAR =====
     upload_conv = ConversationHandler(
@@ -1536,7 +1402,6 @@ def setup_bot():
     bot.add_handler(CallbackQueryHandler(menu_yt, pattern="^menu_yt$"))
     bot.add_handler(CallbackQueryHandler(menu_store, pattern="^menu_store$"))
     bot.add_handler(CallbackQueryHandler(menu_keys, pattern="^menu_keys$"))
-    bot.add_handler(CallbackQueryHandler(menu_suggestions, pattern="^menu_suggestions$"))
     bot.add_handler(CallbackQueryHandler(menu_stats, pattern="^menu_stats$"))
     bot.add_handler(CallbackQueryHandler(menu_info, pattern="^menu_info$"))
     bot.add_handler(CallbackQueryHandler(back_main, pattern="^back_main$"))
@@ -1554,11 +1419,6 @@ def setup_bot():
     bot.add_handler(CallbackQueryHandler(keys_list, pattern="^keys_list$"))
     bot.add_handler(CallbackQueryHandler(keys_del, pattern="^keys_del$"))
     bot.add_handler(CallbackQueryHandler(keys_del_confirm, pattern="^keys_del_confirm$"))
-    
-    bot.add_handler(CallbackQueryHandler(suggest_send, pattern="^suggest_send$"))
-    bot.add_handler(CallbackQueryHandler(suggest_list, pattern="^suggest_list$"))
-    bot.add_handler(CallbackQueryHandler(suggest_delete, pattern="^suggest_delete$"))
-    bot.add_handler(CallbackQueryHandler(suggest_delete_confirm, pattern="^del_sugg_"))
     
     return bot
 

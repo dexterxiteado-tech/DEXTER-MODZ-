@@ -74,29 +74,19 @@ def gen_key():
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=16))
 
 def get_video_id(url):
-    """Extrae el ID de YouTube de una URL"""
     if not url: return None
-    # Patrones de YouTube
-    patterns = [
-        r'(?:youtube\.com\/watch\?v=)([\w-]+)',
-        r'(?:youtu\.be\/)([\w-]+)',
-        r'(?:youtube\.com\/shorts\/)([\w-]+)',
-        r'(?:youtube\.com\/embed\/)([\w-]+)',
-        r'(?:youtube\.com\/v\/)([\w-]+)',
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, url)
-        if match:
-            return match.group(1)
+    if "v=" in url: return url.split("v=")[1].split("&")[0]
+    if "youtu.be/" in url: return url.split("youtu.be/")[1].split("?")[0]
+    if "youtube.com/shorts/" in url:
+        return url.split("youtube.com/shorts/")[1].split("?")[0]
     return None
 
 # ==================== FUNCIÓN PARA OBTENER THUMBNAIL ====================
 def download_thumbnail(video_id):
     """Descarga el thumbnail de YouTube y lo guarda en uploads/"""
     if not video_id:
-        return None
+        return None, None
     
-    # URLs de thumbnail de YouTube (de mejor a peor calidad)
     thumb_urls = [
         f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg",
         f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
@@ -111,24 +101,17 @@ def download_thumbnail(video_id):
                 thumb_path = os.path.join(UPLOADS_DIR, thumb_filename)
                 with open(thumb_path, 'wb') as f:
                     f.write(response.content)
-                print(f"✅ Thumbnail descargado: {thumb_filename}")
                 return thumb_filename, f"/uploads/{thumb_filename}"
-        except Exception as e:
-            print(f"Error descargando thumbnail: {e}")
+        except:
             continue
     
     return None, None
 
 # ==================== FUNCIÓN DE SUBIDA ====================
 def upload_file(filepath, filename=None):
-    """Sube un archivo al servidor y devuelve el enlace"""
     if filename is None:
         filename = os.path.basename(filepath)
-    
-    # Copiar a uploads
     dest_path = os.path.join(UPLOADS_DIR, filename)
-    
-    # Si ya existe, agregar número
     counter = 1
     base, ext = os.path.splitext(filename)
     while os.path.exists(dest_path):
@@ -136,15 +119,11 @@ def upload_file(filepath, filename=None):
         dest_path = os.path.join(UPLOADS_DIR, new_name)
         filename = new_name
         counter += 1
-    
     shutil.copy2(filepath, dest_path)
-    
-    # Generar enlace público
     if PUBLIC_URL:
         link = f"{PUBLIC_URL.rstrip('/')}/uploads/{filename}"
     else:
         link = f"http://localhost:5000/uploads/{filename}"
-    
     return link, filename
 
 # ==================== SEGURIDAD WEB ====================
@@ -218,10 +197,8 @@ def is_admin(update):
     try: return update.effective_user.id == ADMIN_ID
     except: return False
 
-# ==================== ESTADOS PARA CONVERSACIONES ====================
+# ==================== ESTADOS ====================
 UPLOAD_WAITING_FILE = 1
-WAITING_YT_LINK = 2
-WAITING_YT_NAME = 3
 
 # ==================== MENÚ PRINCIPAL ====================
 async def start_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -231,8 +208,7 @@ async def start_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     
     keyboard = [
         [InlineKeyboardButton("📤 Subir Archivo", callback_data="upload_file")],
-        [InlineKeyboardButton("📹 Agregar Video YouTube", callback_data="yt_add_start")],
-        [InlineKeyboardButton("📋 Ver Videos", callback_data="yt_list")],
+        [InlineKeyboardButton("📹 YouTube", callback_data="menu_yt")],
         [InlineKeyboardButton("🛒 Tienda", callback_data="menu_store")],
         [InlineKeyboardButton("🔑 Keys", callback_data="menu_keys")],
         [InlineKeyboardButton("📊 Estadísticas", callback_data="menu_stats")],
@@ -241,9 +217,8 @@ async def start_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(
         "🤖 **PAPI DEXTER BOT**\n\n"
-        "📤 **Sube archivos a tu web**\n"
-        "📥 Obtén enlaces directos\n\n"
-        f"📁 **Dominio:** {PUBLIC_URL or 'localhost'}\n\n"
+        "📤 **Sube archivos**\n"
+        "📹 **Agrega videos de YouTube**\n\n"
         "Selecciona una opción:",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown"
@@ -253,7 +228,6 @@ async def start_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def upload_file_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    
     ctx.user_data.clear()
     
     keyboard = [[InlineKeyboardButton("❌ Cancelar", callback_data="upload_cancel")]]
@@ -264,10 +238,7 @@ async def upload_file_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "Puedes enviar:\n"
         "• 📁 Archivo cualquiera\n"
         "• 📷 Imagen\n"
-        "• 🎬 Video\n"
-        "• 📦 ZIP\n\n"
-        "📁 Se guardará en tu web:\n"
-        f"`{PUBLIC_URL or 'localhost'}/uploads/`\n\n"
+        "• 🎬 Video\n\n"
         "🔴 Presiona 'Cancelar' para salir.",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown"
@@ -306,7 +277,6 @@ async def receive_file(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         temp_path = os.path.join(TEMP_DIR, file_name)
         await file.download_to_drive(temp_path)
         
-        # Subir al servidor
         link, final_name = upload_file(temp_path, file_name)
         
         if os.path.exists(temp_path):
@@ -345,157 +315,47 @@ async def upload_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text("❌ Subida cancelada", parse_mode="Markdown")
     return ConversationHandler.END
 
-# ==================== YOUTUBE CON THUMBNAIL ====================
-async def yt_add_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+# ==================== MENÚ YOUTUBE ====================
+async def menu_yt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
-    ctx.user_data.clear()
-    
-    keyboard = [[InlineKeyboardButton("❌ Cancelar", callback_data="yt_cancel")]]
-    
-    await query.edit_message_text(
-        "📹 **AGREGAR VIDEO DE YOUTUBE**\n\n"
-        "📌 **PASO 1:** Envía el **link de YouTube**\n\n"
-        "Ejemplos:\n"
-        "`https://youtu.be/xxxxx`\n"
-        "`https://www.youtube.com/watch?v=xxxxx`\n"
-        "`https://youtube.com/shorts/xxxxx`\n\n"
-        "🖼️ **El thumbnail se descargará automáticamente**\n\n"
-        "🔴 Presiona 'Cancelar' para salir.",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="Markdown"
-    )
-    
-    return WAITING_YT_LINK
-
-async def yt_receive_link(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update):
-        return ConversationHandler.END
-    
-    url = update.message.text.strip()
-    video_id = get_video_id(url)
-    
-    if not video_id:
-        await update.message.reply_text(
-            "❌ **Link inválido**\n\n"
-            "Envía un link válido de YouTube.\n"
-            "Ejemplo: `https://youtu.be/xxxxx`",
-            parse_mode="Markdown"
-        )
-        return WAITING_YT_LINK
-    
-    ctx.user_data['yt_url'] = url
-    ctx.user_data['yt_id'] = video_id
-    
-    # Descargar thumbnail
-    await update.message.reply_text(f"🖼️ Descargando thumbnail para `{video_id}`...", parse_mode="Markdown")
-    
-    thumb_filename, thumb_url = download_thumbnail(video_id)
-    ctx.user_data['thumb_filename'] = thumb_filename
-    ctx.user_data['thumb_url'] = thumb_url
-    
-    keyboard = [[InlineKeyboardButton("❌ Cancelar", callback_data="yt_cancel")]]
-    
-    if thumb_url:
-        await update.message.reply_photo(
-            photo=thumb_url,
-            caption=f"✅ **Thumbnail descargado**\n\n"
-                    f"📌 **PASO 2:** Envía el **nombre del archivo**\n\n"
-                    f"Ejemplo:\n"
-                    f"`video_skin`\n\n"
-                    f"📁 Se guardará como: `video_skin.unity3d`",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode="Markdown"
-        )
-    else:
-        await update.message.reply_text(
-            f"⚠️ No se pudo descargar el thumbnail\n\n"
-            f"📌 **PASO 2:** Envía el **nombre del archivo**\n\n"
-            f"Ejemplo:\n"
-            f"`video_skin`",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode="Markdown"
-        )
-    
-    return WAITING_YT_NAME
-
-async def yt_receive_name(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update):
-        return ConversationHandler.END
-    
-    name = update.message.text.strip()
-    
-    if not name or len(name) < 2:
-        await update.message.reply_text("❌ Nombre inválido (mínimo 2 caracteres)")
-        return WAITING_YT_NAME
-    
-    url = ctx.user_data.get('yt_url')
-    video_id = ctx.user_data.get('yt_id')
-    thumb_filename = ctx.user_data.get('thumb_filename')
-    thumb_url = ctx.user_data.get('thumb_url')
-    
-    # Guardar en posts
-    posts = load_posts()
-    posts.append({
-        "youtube": url,
-        "file": name,
-        "video_id": video_id,
-        "thumbnail": thumb_url,
-        "thumb_filename": thumb_filename,
-        "created": time.time()
-    })
-    save_posts(posts)
-    
     keyboard = [
-        [InlineKeyboardButton("📹 Ver Videos", callback_data="yt_list")],
-        [InlineKeyboardButton("📤 Agregar otro", callback_data="yt_add_start")],
+        [InlineKeyboardButton("📥 Agregar Video", callback_data="yt_add")],
+        [InlineKeyboardButton("📋 Listar Videos", callback_data="yt_list")],
+        [InlineKeyboardButton("🗑️ Eliminar Video", callback_data="yt_delete")],
+        [InlineKeyboardButton("🧹 Limpiar Todo", callback_data="yt_clear")],
         [InlineKeyboardButton("🔙 Volver", callback_data="back_main")]
     ]
     
-    message_text = (
-        f"✅ **VIDEO AGREGADO**\n\n"
-        f"📹 **Link:** {url}\n"
-        f"📁 **Archivo:** `{name}`\n"
-        f"🖼️ **Thumbnail:** {thumb_url or 'No disponible'}\n\n"
-        f"📌 El thumbnail se mostrará en la lista de videos."
+    await query.edit_message_text(
+        "📹 **GESTIÓN DE VIDEOS**\n\nSelecciona una acción:",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
     )
-    
-    if thumb_url:
-        await update.message.reply_photo(
-            photo=thumb_url,
-            caption=message_text,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode="Markdown"
-        )
-    else:
-        await update.message.reply_text(
-            message_text,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode="Markdown"
-        )
-    
-    ctx.user_data.clear()
-    return ConversationHandler.END
 
-async def yt_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+async def yt_add(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    ctx.user_data.clear()
-    await query.edit_message_text("❌ Operación cancelada", parse_mode="Markdown")
-    return ConversationHandler.END
+    await query.edit_message_text(
+        "📥 **Agregar Video**\n\n"
+        "Formato:\n"
+        "`/yt link_youtube nombre`\n\n"
+        "Ejemplo:\n"
+        "`/yt https://youtu.be/xxxxx video1`",
+        parse_mode="Markdown"
+    )
 
 async def yt_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    
     posts = load_posts()
     if not posts:
-        await query.edit_message_text("📋 No hay videos guardados.")
+        await query.edit_message_text("📋 No hay videos.")
         return
     
-    # Mostrar videos con thumbnail
     for i, p in enumerate(posts):
+        # Mostrar cada video con su thumbnail
         thumb = p.get('thumbnail')
         name = p.get('file', 'sin nombre')
         url = p.get('youtube', 'sin link')
@@ -515,12 +375,57 @@ async def yt_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         else:
             await query.message.reply_text(message, parse_mode="Markdown")
     
-    keyboard = [[InlineKeyboardButton("🔙 Volver", callback_data="back_main")]]
+    keyboard = [[InlineKeyboardButton("🔙 Volver", callback_data="menu_yt")]]
     await query.message.reply_text(
         "📋 **FIN DE LA LISTA**",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown"
     )
+
+async def yt_delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    posts = load_posts()
+    if not posts:
+        await query.edit_message_text("📋 No hay videos.")
+        return
+    keyboard = []
+    for i, p in enumerate(posts):
+        keyboard.append([InlineKeyboardButton(f"🗑️ {i} - {p.get('file', 'video')[:20]}", callback_data=f"del_yt_{i}")])
+    keyboard.append([InlineKeyboardButton("🔙 Volver", callback_data="menu_yt")])
+    await query.edit_message_text("🗑️ **SELECCIONA VIDEO:**", reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def yt_delete_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    try:
+        idx = int(query.data.split("_")[2])
+        posts = load_posts()
+        if 0 <= idx < len(posts):
+            removed = posts.pop(idx)
+            save_posts(posts)
+            await query.edit_message_text(f"✅ Eliminado: `{removed.get('file')}`")
+        else:
+            await query.edit_message_text("❌ Error")
+    except:
+        await query.edit_message_text("❌ Error")
+    keyboard = [[InlineKeyboardButton("🔙 Volver", callback_data="menu_yt")]]
+    await query.edit_message_text("🗑️ **ELIMINADO**", reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def yt_clear(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    keyboard = [
+        [InlineKeyboardButton("✅ SI", callback_data="yt_clear_confirm")],
+        [InlineKeyboardButton("❌ NO", callback_data="menu_yt")]
+    ]
+    await query.edit_message_text("⚠️ **¿ELIMINAR TODOS?**", reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def yt_clear_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    save_posts([])
+    await query.edit_message_text("🧹 Todos eliminados.")
 
 # ==================== MENÚ TIENDA ====================
 async def menu_store(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -660,9 +565,7 @@ async def menu_stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 📹 Videos: {posts}
 🛒 Productos: {store}
 🔑 Keys: {keys}
-⏱️ Uptime: {hours}h {minutes}m
-
-📁 Archivos en: `{PUBLIC_URL or 'localhost'}/uploads/`"""
+⏱️ Uptime: {hours}h {minutes}m"""
     
     keyboard = [[InlineKeyboardButton("🔙 Volver", callback_data="back_main")]]
     await query.edit_message_text(txt, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
@@ -677,12 +580,10 @@ async def menu_info(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 🤖 Bot de gestión de archivos
 
 📌 **Funciones:**
-• 📤 Subir archivos a tu web
-• 📹 Agregar videos de YouTube (con thumbnail)
+• 📤 Subir archivos
+• 📹 Gestión de videos (con thumbnail)
 • 🛒 Tienda
 • 🔑 Keys
-
-📁 **Tu web:** `{PUBLIC_URL or 'localhost'}`
 
 ⚡ Versión 6.0 - Con Thumbnails de YouTube"""
     
@@ -696,8 +597,7 @@ async def back_main(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     
     keyboard = [
         [InlineKeyboardButton("📤 Subir Archivo", callback_data="upload_file")],
-        [InlineKeyboardButton("📹 Agregar Video YouTube", callback_data="yt_add_start")],
-        [InlineKeyboardButton("📋 Ver Videos", callback_data="yt_list")],
+        [InlineKeyboardButton("📹 YouTube", callback_data="menu_yt")],
         [InlineKeyboardButton("🛒 Tienda", callback_data="menu_store")],
         [InlineKeyboardButton("🔑 Keys", callback_data="menu_keys")],
         [InlineKeyboardButton("📊 Estadísticas", callback_data="menu_stats")],
@@ -705,10 +605,7 @@ async def back_main(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ]
     
     await query.edit_message_text(
-        "🤖 **PAPI DEXTER BOT**\n\n"
-        "📤 **Sube archivos a tu web**\n"
-        "📥 Obtén enlaces directos\n\n"
-        "Selecciona una opción:",
+        "🤖 **PAPI DEXTER BOT**\n\nSelecciona una opción:",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown"
     )
@@ -732,7 +629,7 @@ async def yt_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             "created": time.time()
         })
         save_posts(posts)
-        await update.message.reply_text(f"✅ Video: {ctx.args[1]}")
+        await update.message.reply_text(f"✅ Video: {ctx.args[1]} con thumbnail")
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {e}")
 
@@ -793,25 +690,20 @@ def setup_bot():
     )
     bot.add_handler(upload_conv)
     
-    # YouTube con Thumbnail
-    yt_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(yt_add_start, pattern="^yt_add_start$")],
-        states={
-            WAITING_YT_LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, yt_receive_link)],
-            WAITING_YT_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, yt_receive_name)],
-        },
-        fallbacks=[CallbackQueryHandler(yt_cancel, pattern="^yt_cancel$")],
-        allow_reentry=True
-    )
-    bot.add_handler(yt_conv)
-    
     # Callbacks
-    bot.add_handler(CallbackQueryHandler(yt_list, pattern="^yt_list$"))
+    bot.add_handler(CallbackQueryHandler(menu_yt, pattern="^menu_yt$"))
     bot.add_handler(CallbackQueryHandler(menu_store, pattern="^menu_store$"))
     bot.add_handler(CallbackQueryHandler(menu_keys, pattern="^menu_keys$"))
     bot.add_handler(CallbackQueryHandler(menu_stats, pattern="^menu_stats$"))
     bot.add_handler(CallbackQueryHandler(menu_info, pattern="^menu_info$"))
     bot.add_handler(CallbackQueryHandler(back_main, pattern="^back_main$"))
+    
+    bot.add_handler(CallbackQueryHandler(yt_add, pattern="^yt_add$"))
+    bot.add_handler(CallbackQueryHandler(yt_list, pattern="^yt_list$"))
+    bot.add_handler(CallbackQueryHandler(yt_delete, pattern="^yt_delete$"))
+    bot.add_handler(CallbackQueryHandler(yt_clear, pattern="^yt_clear$"))
+    bot.add_handler(CallbackQueryHandler(yt_delete_confirm, pattern="^del_yt_"))
+    bot.add_handler(CallbackQueryHandler(yt_clear_confirm, pattern="^yt_clear_confirm$"))
     
     bot.add_handler(CallbackQueryHandler(store_add, pattern="^store_add$"))
     bot.add_handler(CallbackQueryHandler(store_list, pattern="^store_list$"))
@@ -830,7 +722,7 @@ async def run_bot():
     bot = setup_bot()
     await bot.initialize()
     await bot.start()
-    print(f"✅ Bot iniciado - Archivos en: {PUBLIC_URL or 'localhost'}/uploads/")
+    print("✅ Bot iniciado con Thumbnails de YouTube")
     await bot.updater.start_polling()
     await asyncio.Event().wait()
 

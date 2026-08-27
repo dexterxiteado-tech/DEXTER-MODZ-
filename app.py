@@ -56,7 +56,7 @@ START_TIME = time.time()
 # ==================== ESTADOS PARA CONVERSACIONES ====================
 UPLOAD_WAITING_FILE = 1
 WAITING_YT_LINK = 2
-WAITING_YT_NAME = 3
+WAITING_YT_DOWNLOAD = 3
 WAITING_STORE_NAME = 10
 WAITING_STORE_PRICE = 11
 WAITING_STORE_DESC = 12
@@ -470,7 +470,7 @@ async def upload_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await show_main_menu(query, ctx)
     return ConversationHandler.END
 
-# ==================== AGREGAR VIDEO (SIN COMANDOS) ====================
+# ==================== AGREGAR VIDEO (LINK YT + LINK DESCARGA) ====================
 async def yt_add_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -480,7 +480,7 @@ async def yt_add_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("❌ Cancelar", callback_data="yt_cancel")]]
     
     await query.edit_message_text(
-        "📹 **AGREGAR VIDEO DE YOUTUBE**\n\n"
+        "📹 **AGREGAR VIDEO**\n\n"
         "📌 **PASO 1:** Envía el **link de YouTube**\n\n"
         "Ejemplos:\n"
         "`https://youtu.be/xxxxx`\n"
@@ -526,50 +526,57 @@ async def yt_receive_link(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_photo(
             photo=thumb_url,
             caption=f"✅ **Thumbnail descargado**\n\n"
-                    f"📌 **PASO 2:** Envía el **nombre del archivo**\n\n"
+                    f"📌 **PASO 2:** Envía el **link de descarga**\n\n"
+                    f"Puede ser de:\n"
+                    f"• MediaFire\n"
+                    f"• Mega\n"
+                    f"• Google Drive\n"
+                    f"• Cualquier otro servicio\n\n"
                     f"Ejemplo:\n"
-                    f"`video_skin`\n\n"
-                    f"📁 Se guardará como: `video_skin`",
+                    f"`https://www.mediafire.com/file/xxxxx`",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="Markdown"
         )
     else:
         await update.message.reply_text(
             f"⚠️ No se pudo descargar el thumbnail\n\n"
-            f"📌 **PASO 2:** Envía el **nombre del archivo**\n\n"
-            f"Ejemplo:\n"
-            f"`video_skin`",
+            f"📌 **PASO 2:** Envía el **link de descarga**\n\n"
+            f"Puede ser de:\n"
+            f"• MediaFire\n"
+            f"• Mega\n"
+            f"• Google Drive\n"
+            f"• Cualquier otro servicio",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="Markdown"
         )
     
-    return WAITING_YT_NAME
+    return WAITING_YT_DOWNLOAD
 
-async def yt_receive_name(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+async def yt_receive_download(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
         return ConversationHandler.END
     
-    name = update.message.text.strip()
+    download_link = update.message.text.strip()
     
-    if not name or len(name) < 2:
+    # Validar que sea un link válido
+    if not download_link.startswith(('http://', 'https://')):
         await update.message.reply_text(
-            "❌ **Nombre inválido**\n\n"
-            "El nombre debe tener al menos 2 caracteres.\n"
-            "Ejemplo: `video_skin`",
+            "❌ **Link inválido**\n\n"
+            "Debe comenzar con `http://` o `https://`\n"
+            "Ejemplo: `https://www.mediafire.com/file/xxxxx`",
             parse_mode="Markdown"
         )
-        return WAITING_YT_NAME
+        return WAITING_YT_DOWNLOAD
     
-    url = ctx.user_data.get('yt_url')
-    video_id = ctx.user_data.get('yt_id')
-    thumb_url = ctx.user_data.get('thumb_url')
+    ctx.user_data['download_link'] = download_link
     
+    # Guardar en posts
     posts = load_posts()
     posts.append({
-        "youtube": url,
-        "file": name,
-        "video_id": video_id,
-        "thumbnail": thumb_url,
+        "youtube": ctx.user_data.get('yt_url'),
+        "video_id": ctx.user_data.get('yt_id'),
+        "thumbnail": ctx.user_data.get('thumb_url'),
+        "download": download_link,
         "created": time.time()
     })
     save_posts(posts)
@@ -580,11 +587,15 @@ async def yt_receive_name(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🔙 Menú Principal", callback_data="back_main")]
     ]
     
-    message = f"✅ **VIDEO AGREGADO**\n\n📹 **Link:** {url}\n📁 **Archivo:** `{name}`"
+    message = f"""✅ **VIDEO AGREGADO**
+
+📹 **YouTube:** {ctx.user_data.get('yt_url')}
+📥 **Descarga:** {download_link}
+🖼️ **Thumbnail:** {'✅ Descargado' if ctx.user_data.get('thumb_url') else '❌ No disponible'}"""
     
-    if thumb_url:
+    if ctx.user_data.get('thumb_url'):
         await update.message.reply_photo(
-            photo=thumb_url,
+            photo=ctx.user_data.get('thumb_url'),
             caption=message,
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="Markdown"
@@ -608,7 +619,147 @@ async def yt_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await show_main_menu(query, ctx)
     return ConversationHandler.END
 
-# ==================== AGREGAR PRODUCTO (SIN COMANDOS) ====================
+# ==================== LISTAR VIDEOS ====================
+async def yt_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    posts = load_posts()
+    if not posts:
+        await query.edit_message_text("📋 No hay videos.")
+        await asyncio.sleep(1.5)
+        await menu_yt(update, ctx)
+        return
+    
+    for i, p in enumerate(posts):
+        thumb = p.get('thumbnail')
+        youtube = p.get('youtube', 'sin link')
+        download = p.get('download', 'sin link')
+        video_id = p.get('video_id', '')
+        
+        message = f"📹 **Video {i+1}**\n\n"
+        message += f"📹 **YouTube:** {youtube}\n"
+        message += f"📥 **Descarga:** {download}\n"
+        if video_id:
+            message += f"🆔 **ID:** `{video_id}`\n"
+        
+        if thumb and os.path.exists(os.path.join('.', thumb.lstrip('/'))):
+            try:
+                with open(os.path.join('.', thumb.lstrip('/')), 'rb') as f:
+                    await query.message.reply_photo(
+                        photo=InputFile(f),
+                        caption=message,
+                        parse_mode="Markdown"
+                    )
+            except:
+                await query.message.reply_text(message, parse_mode="Markdown")
+        else:
+            await query.message.reply_text(message, parse_mode="Markdown")
+    
+    await asyncio.sleep(1)
+    await menu_yt(update, ctx)
+
+# ==================== ELIMINAR VIDEO ====================
+async def yt_delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    posts = load_posts()
+    if not posts:
+        await query.edit_message_text("📋 No hay videos.")
+        await asyncio.sleep(1.5)
+        await menu_yt(update, ctx)
+        return
+    
+    keyboard = []
+    for i, p in enumerate(posts):
+        youtube = p.get('youtube', 'sin link')[:25]
+        keyboard.append([InlineKeyboardButton(f"🗑️ {i} - {youtube}...", callback_data=f"del_yt_{i}")])
+    keyboard.append([InlineKeyboardButton("🔙 Volver", callback_data="menu_yt")])
+    
+    await query.edit_message_text(
+        "🗑️ **SELECCIONA VIDEO:**",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
+
+async def yt_delete_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    try:
+        idx = int(query.data.split("_")[2])
+        posts = load_posts()
+        if 0 <= idx < len(posts):
+            removed = posts.pop(idx)
+            save_posts(posts)
+            await query.edit_message_text(f"✅ Video eliminado")
+        else:
+            await query.edit_message_text("❌ Error")
+    except:
+        await query.edit_message_text("❌ Error")
+    
+    await asyncio.sleep(1)
+    await menu_yt(update, ctx)
+
+# ==================== LIMPIAR VIDEOS ====================
+async def yt_clear(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    keyboard = [
+        [InlineKeyboardButton("✅ SI", callback_data="yt_clear_confirm")],
+        [InlineKeyboardButton("❌ NO", callback_data="menu_yt")]
+    ]
+    
+    await query.edit_message_text(
+        "⚠️ **¿ELIMINAR TODOS?**",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
+
+async def yt_clear_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    save_posts([])
+    await query.edit_message_text("🧹 Todos eliminados.")
+    await asyncio.sleep(1)
+    await menu_yt(update, ctx)
+
+# ==================== MENÚ YOUTUBE ====================
+async def menu_yt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    keyboard = [
+        [InlineKeyboardButton("📥 Agregar Video", callback_data="yt_add_start")],
+        [InlineKeyboardButton("📋 Listar Videos", callback_data="yt_list")],
+        [InlineKeyboardButton("🗑️ Eliminar Video", callback_data="yt_delete")],
+        [InlineKeyboardButton("🧹 Limpiar Todo", callback_data="yt_clear")],
+        [InlineKeyboardButton("🔙 Menú Principal", callback_data="back_main")]
+    ]
+    
+    await query.edit_message_text(
+        "📹 **GESTIÓN DE VIDEOS**\n\nSelecciona una acción:",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
+
+# ==================== MENÚ TIENDA ====================
+async def menu_store(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    keyboard = [
+        [InlineKeyboardButton("➕ Agregar Producto", callback_data="store_add_start")],
+        [InlineKeyboardButton("📋 Listar Productos", callback_data="store_list")],
+        [InlineKeyboardButton("🗑️ Eliminar Producto", callback_data="store_delete")],
+        [InlineKeyboardButton("🔙 Menú Principal", callback_data="back_main")]
+    ]
+    
+    await query.edit_message_text(
+        "🛒 **TIENDA**\n\nSelecciona una acción:",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
+
 async def store_add_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -780,7 +931,84 @@ async def store_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await show_main_menu(query, ctx)
     return ConversationHandler.END
 
-# ==================== GENERAR KEYS (SIN COMANDOS) ====================
+# ==================== LISTAR PRODUCTOS ====================
+async def store_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = load_store()
+    if not data:
+        await query.edit_message_text("🛒 Sin productos.")
+        await asyncio.sleep(1.5)
+        await menu_store(update, ctx)
+        return
+    
+    txt = "🛒 **PRODUCTOS:**\n\n"
+    for i, p in enumerate(data):
+        txt += f"{i}. **{p.get('nombre')}** | ${p.get('precio')}\n"
+    
+    await query.edit_message_text(txt, parse_mode="Markdown")
+    await asyncio.sleep(2)
+    await menu_store(update, ctx)
+
+# ==================== ELIMINAR PRODUCTO ====================
+async def store_delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = load_store()
+    if not data:
+        await query.edit_message_text("🛒 Sin productos.")
+        await asyncio.sleep(1.5)
+        await menu_store(update, ctx)
+        return
+    
+    keyboard = []
+    for i, p in enumerate(data):
+        nombre = p.get('nombre', f'producto_{i}')[:20]
+        keyboard.append([InlineKeyboardButton(f"🗑️ {i} - {nombre}", callback_data=f"del_store_{i}")])
+    keyboard.append([InlineKeyboardButton("🔙 Volver", callback_data="menu_store")])
+    
+    await query.edit_message_text(
+        "🗑️ **SELECCIONA PRODUCTO:**",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
+
+async def store_delete_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    try:
+        idx = int(query.data.split("_")[2])
+        data = load_store()
+        if 0 <= idx < len(data):
+            removed = data.pop(idx)
+            save_store(data)
+            await query.edit_message_text(f"✅ Eliminado: `{removed.get('nombre')}`")
+        else:
+            await query.edit_message_text("❌ Error")
+    except:
+        await query.edit_message_text("❌ Error")
+    
+    await asyncio.sleep(1)
+    await menu_store(update, ctx)
+
+# ==================== MENÚ KEYS ====================
+async def menu_keys(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    keyboard = [
+        [InlineKeyboardButton("🔑 Generar Keys", callback_data="keys_gen_start")],
+        [InlineKeyboardButton("📋 Ver Keys", callback_data="keys_list")],
+        [InlineKeyboardButton("🗑️ Eliminar Keys", callback_data="keys_del")],
+        [InlineKeyboardButton("🔙 Menú Principal", callback_data="back_main")]
+    ]
+    
+    await query.edit_message_text(
+        "🔑 **KEYS**\n\nSelecciona una acción:",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
+
 async def keys_gen_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -879,213 +1107,7 @@ async def keys_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await show_main_menu(query, ctx)
     return ConversationHandler.END
 
-# ==================== MENÚ YOUTUBE ====================
-async def menu_yt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    
-    keyboard = [
-        [InlineKeyboardButton("📥 Agregar Video", callback_data="yt_add_start")],
-        [InlineKeyboardButton("📋 Listar Videos", callback_data="yt_list")],
-        [InlineKeyboardButton("🗑️ Eliminar Video", callback_data="yt_delete")],
-        [InlineKeyboardButton("🧹 Limpiar Todo", callback_data="yt_clear")],
-        [InlineKeyboardButton("🔙 Menú Principal", callback_data="back_main")]
-    ]
-    
-    await query.edit_message_text(
-        "📹 **GESTIÓN DE VIDEOS**\n\nSelecciona una acción:",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="Markdown"
-    )
-
-async def yt_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    posts = load_posts()
-    if not posts:
-        await query.edit_message_text("📋 No hay videos.")
-        await asyncio.sleep(1.5)
-        await menu_yt(update, ctx)
-        return
-    
-    for i, p in enumerate(posts):
-        thumb = p.get('thumbnail')
-        name = p.get('file', 'sin nombre')
-        url = p.get('youtube', 'sin link')
-        
-        message = f"📹 **{i}. {name}**\n\n🔗 {url}"
-        
-        if thumb and os.path.exists(os.path.join('.', thumb.lstrip('/'))):
-            try:
-                with open(os.path.join('.', thumb.lstrip('/')), 'rb') as f:
-                    await query.message.reply_photo(
-                        photo=InputFile(f),
-                        caption=message,
-                        parse_mode="Markdown"
-                    )
-            except:
-                await query.message.reply_text(message, parse_mode="Markdown")
-        else:
-            await query.message.reply_text(message, parse_mode="Markdown")
-    
-    await asyncio.sleep(1)
-    await menu_yt(update, ctx)
-
-async def yt_delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    posts = load_posts()
-    if not posts:
-        await query.edit_message_text("📋 No hay videos.")
-        await asyncio.sleep(1.5)
-        await menu_yt(update, ctx)
-        return
-    
-    keyboard = []
-    for i, p in enumerate(posts):
-        keyboard.append([InlineKeyboardButton(f"🗑️ {i} - {p.get('file', 'video')[:20]}", callback_data=f"del_yt_{i}")])
-    keyboard.append([InlineKeyboardButton("🔙 Volver", callback_data="menu_yt")])
-    
-    await query.edit_message_text(
-        "🗑️ **SELECCIONA VIDEO:**",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="Markdown"
-    )
-
-async def yt_delete_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    try:
-        idx = int(query.data.split("_")[2])
-        posts = load_posts()
-        if 0 <= idx < len(posts):
-            removed = posts.pop(idx)
-            save_posts(posts)
-            await query.edit_message_text(f"✅ Eliminado: `{removed.get('file')}`")
-        else:
-            await query.edit_message_text("❌ Error")
-    except:
-        await query.edit_message_text("❌ Error")
-    
-    await asyncio.sleep(1)
-    await menu_yt(update, ctx)
-
-async def yt_clear(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    
-    keyboard = [
-        [InlineKeyboardButton("✅ SI", callback_data="yt_clear_confirm")],
-        [InlineKeyboardButton("❌ NO", callback_data="menu_yt")]
-    ]
-    
-    await query.edit_message_text(
-        "⚠️ **¿ELIMINAR TODOS?**",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="Markdown"
-    )
-
-async def yt_clear_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    save_posts([])
-    await query.edit_message_text("🧹 Todos eliminados.")
-    await asyncio.sleep(1)
-    await menu_yt(update, ctx)
-
-# ==================== MENÚ TIENDA ====================
-async def menu_store(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    
-    keyboard = [
-        [InlineKeyboardButton("➕ Agregar Producto", callback_data="store_add_start")],
-        [InlineKeyboardButton("📋 Listar Productos", callback_data="store_list")],
-        [InlineKeyboardButton("🗑️ Eliminar Producto", callback_data="store_delete")],
-        [InlineKeyboardButton("🔙 Menú Principal", callback_data="back_main")]
-    ]
-    
-    await query.edit_message_text(
-        "🛒 **TIENDA**\n\nSelecciona una acción:",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="Markdown"
-    )
-
-async def store_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    data = load_store()
-    if not data:
-        await query.edit_message_text("🛒 Sin productos.")
-        await asyncio.sleep(1.5)
-        await menu_store(update, ctx)
-        return
-    
-    txt = "🛒 **PRODUCTOS:**\n\n"
-    for i, p in enumerate(data):
-        txt += f"{i}. **{p.get('nombre')}** | ${p.get('precio')}\n"
-    
-    await query.edit_message_text(txt, parse_mode="Markdown")
-    await asyncio.sleep(2)
-    await menu_store(update, ctx)
-
-async def store_delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    data = load_store()
-    if not data:
-        await query.edit_message_text("🛒 Sin productos.")
-        await asyncio.sleep(1.5)
-        await menu_store(update, ctx)
-        return
-    
-    keyboard = []
-    for i, p in enumerate(data):
-        keyboard.append([InlineKeyboardButton(f"🗑️ {i} - {p.get('nombre')[:20]}", callback_data=f"del_store_{i}")])
-    keyboard.append([InlineKeyboardButton("🔙 Volver", callback_data="menu_store")])
-    
-    await query.edit_message_text(
-        "🗑️ **SELECCIONA PRODUCTO:**",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="Markdown"
-    )
-
-async def store_delete_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    try:
-        idx = int(query.data.split("_")[2])
-        data = load_store()
-        if 0 <= idx < len(data):
-            removed = data.pop(idx)
-            save_store(data)
-            await query.edit_message_text(f"✅ Eliminado: `{removed.get('nombre')}`")
-        else:
-            await query.edit_message_text("❌ Error")
-    except:
-        await query.edit_message_text("❌ Error")
-    
-    await asyncio.sleep(1)
-    await menu_store(update, ctx)
-
-# ==================== MENÚ KEYS ====================
-async def menu_keys(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    
-    keyboard = [
-        [InlineKeyboardButton("🔑 Generar Keys", callback_data="keys_gen_start")],
-        [InlineKeyboardButton("📋 Ver Keys", callback_data="keys_list")],
-        [InlineKeyboardButton("🗑️ Eliminar Keys", callback_data="keys_del")],
-        [InlineKeyboardButton("🔙 Menú Principal", callback_data="back_main")]
-    ]
-    
-    await query.edit_message_text(
-        "🔑 **KEYS**\n\nSelecciona una acción:",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="Markdown"
-    )
-
+# ==================== LISTAR KEYS ====================
 async def keys_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -1104,6 +1126,7 @@ async def keys_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await asyncio.sleep(2)
     await menu_keys(update, ctx)
 
+# ==================== ELIMINAR KEYS ====================
 async def keys_del(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -1176,9 +1199,9 @@ async def menu_info(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 📌 **Funciones:**
 • 📤 Subir archivos (con opción de borrar)
-• 📹 Gestión de videos (con thumbnail)
+• 📹 Gestión de videos (con thumbnail + link descarga)
 • 🛒 Tienda
-• 🔑 Keys
+• 🔑 Keys (hasta 5000)
 
 🌐 **Web:** {web_url}
 
@@ -1245,7 +1268,7 @@ def setup_bot():
         entry_points=[CallbackQueryHandler(yt_add_start, pattern="^yt_add_start$")],
         states={
             WAITING_YT_LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, yt_receive_link)],
-            WAITING_YT_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, yt_receive_name)],
+            WAITING_YT_DOWNLOAD: [MessageHandler(filters.TEXT & ~filters.COMMAND, yt_receive_download)],
         },
         fallbacks=[CallbackQueryHandler(yt_cancel, pattern="^yt_cancel$")],
         allow_reentry=True

@@ -124,7 +124,7 @@ body {
     transform: scale(1.02);
 }
 
-/* MENSAJES DE ÉXITO/ERROR */
+/* MENSAJES */
 .alert {
     padding: 12px 16px;
     border-radius: 8px;
@@ -144,14 +144,14 @@ body {
     color: #ef4444;
 }
 
-/* LISTA DE SUGERENCIAS */
+/* LISTA */
 .suggestions-list {
     display: flex;
     flex-direction: column;
     gap: 16px;
 }
 
-/* CARD DE SUGERENCIA */
+/* CARD */
 .card {
     background: #111827;
     border-radius: 12px;
@@ -213,6 +213,51 @@ body {
 .estado-leido {
     background: #22c55e;
     color: #000;
+}
+
+.estado-respondido {
+    background: #4fc3f7;
+    color: #000;
+}
+
+/* BOTONES DE ACCIÓN */
+.card-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+}
+
+.btn {
+    padding: 6px 14px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: 0.3s;
+    text-decoration: none;
+    display: inline-block;
+}
+
+.btn-success {
+    background: #22c55e;
+    color: #000;
+}
+
+.btn-success:hover {
+    background: #16a34a;
+    transform: scale(1.02);
+}
+
+.btn-danger {
+    background: #ef4444;
+    color: #fff;
+}
+
+.btn-danger:hover {
+    background: #dc2626;
+    transform: scale(1.02);
 }
 
 /* VACÍO */
@@ -256,6 +301,12 @@ body {
         width: 100%;
         text-align: center;
     }
+    .card-actions {
+        flex-direction: column;
+    }
+    .btn {
+        text-align: center;
+    }
 }
 </style>
 </head>
@@ -291,7 +342,7 @@ body {
         </form>
     </div>
 
-    <!-- LISTA DE SUGERENCIAS -->
+    <!-- LISTA -->
     <h2 style="color: #aaa; font-size: 18px; margin-bottom: 15px;">📋 Sugerencias enviadas</h2>
 
     <div class="suggestions-list">
@@ -322,9 +373,19 @@ body {
                     <span class="estado estado-pendiente">🟡 Pendiente</span>
                 {% elif s.estado == 'leido' %}
                     <span class="estado estado-leido">🟢 Leído</span>
+                {% elif s.estado == 'respondido' %}
+                    <span class="estado estado-respondido">🔵 Respondido</span>
                 {% else %}
                     <span class="estado estado-pendiente">🟡 Sin revisar</span>
                 {% endif %}
+            </div>
+
+            <!-- 🔥 ACCIONES (Admin) -->
+            <div class="card-actions">
+                {% if s.estado == 'pendiente' %}
+                    <button class="btn btn-success" onclick="marcarLeido({{ loop.index0 }})">✅ Marcar leído</button>
+                {% endif %}
+                <button class="btn btn-danger" onclick="eliminarSugerencia({{ loop.index0 }})">🗑️ Eliminar</button>
             </div>
 
         </div>
@@ -342,286 +403,6 @@ body {
     {% endif %}
 
     </div>
-
-</div>
-
-</body>
-</html>}
-
-.header .back {
-    color: #888;
-    text-decoration: none;
-    font-size: 14px;
-    padding: 8px 16px;
-    border: 1px solid #333;
-    border-radius: 8px;
-    transition: 0.3s;
-}
-
-.header .back:hover {
-    border-color: #ff8c00;
-    color: #ff8c00;
-}
-
-/* CONTENEDOR */
-.container {
-    max-width: 900px;
-    margin: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-}
-
-/* CARD DE SUGERENCIA */
-.card {
-    background: #111827;
-    border-radius: 12px;
-    padding: 16px;
-    border: 1px solid #1e293b;
-    transition: 0.3s;
-}
-
-.card:hover {
-    border-color: #ff8c00;
-    box-shadow: 0 0 20px rgba(255, 140, 0, 0.1);
-}
-
-/* ENCABEZADO DE LA CARD */
-.card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 10px;
-}
-
-.card .usuario {
-    color: #22c55e;
-    font-weight: bold;
-    font-size: 14px;
-}
-
-.card .usuario .user-id {
-    color: #666;
-    font-weight: normal;
-    font-size: 12px;
-}
-
-.card .fecha {
-    color: #666;
-    font-size: 12px;
-}
-
-/* MENSAJE */
-.card .mensaje {
-    color: #fff;
-    font-size: 15px;
-    padding: 12px 14px;
-    background: #0d1520;
-    border-radius: 8px;
-    margin: 8px 0 12px 0;
-    border-left: 3px solid #ff8c00;
-    word-wrap: break-word;
-    white-space: pre-wrap;
-}
-
-/* ESTADO */
-.card .estado {
-    display: inline-block;
-    padding: 3px 12px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: bold;
-}
-
-.estado-pendiente {
-    background: #ff8c00;
-    color: #000;
-}
-
-.estado-leido {
-    background: #22c55e;
-    color: #000;
-}
-
-.estado-respondido {
-    background: #4fc3f7;
-    color: #000;
-}
-
-/* BOTONES DE ACCIÓN (Admin) */
-.card-actions {
-    display: flex;
-    gap: 8px;
-    margin-top: 10px;
-    flex-wrap: wrap;
-}
-
-.btn {
-    padding: 6px 14px;
-    border: none;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: bold;
-    cursor: pointer;
-    transition: 0.3s;
-    text-decoration: none;
-    display: inline-block;
-}
-
-.btn-primary {
-    background: #4fc3f7;
-    color: #000;
-}
-
-.btn-primary:hover {
-    background: #81d4fa;
-    transform: scale(1.02);
-}
-
-.btn-success {
-    background: #22c55e;
-    color: #000;
-}
-
-.btn-success:hover {
-    background: #16a34a;
-    transform: scale(1.02);
-}
-
-.btn-danger {
-    background: #ef4444;
-    color: #fff;
-}
-
-.btn-danger:hover {
-    background: #dc2626;
-    transform: scale(1.02);
-}
-
-/* VACÍO */
-.empty {
-    text-align: center;
-    padding: 60px 20px;
-    color: #666;
-}
-
-.empty .big {
-    font-size: 60px;
-    display: block;
-    margin-bottom: 15px;
-}
-
-.empty h2 {
-    color: #888;
-    font-size: 22px;
-}
-
-.empty p {
-    color: #444;
-    font-size: 14px;
-    margin-top: 10px;
-}
-
-/* RESPONSIVE */
-@media (max-width: 600px) {
-    .header {
-        flex-direction: column;
-        gap: 10px;
-        text-align: center;
-    }
-
-    .header h1 {
-        font-size: 20px;
-    }
-
-    .card-header {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-
-    .card-actions {
-        width: 100%;
-    }
-
-    .btn {
-        flex: 1;
-        text-align: center;
-    }
-}
-</style>
-</head>
-
-<body>
-
-<div class="header">
-    <h1>💡 SUGERENCIAS / SUGGESTIONS</h1>
-    <a href="/panel" class="back">🔙 Volver al Panel</a>
-</div>
-
-<div class="container">
-
-{% if sugerencias %}
-
-    {% for s in sugerencias %}
-
-    <div class="card">
-
-        <!-- ENCABEZADO -->
-        <div class="card-header">
-            <span class="usuario">
-                👤 {{ s.usuario or 'Anónimo' }}
-                <span class="user-id">(ID: {{ s.user_id or 'N/A' }})</span>
-            </span>
-            <span class="fecha">
-                📅 {% if s.fecha %}
-                    {{ s.fecha | int | timestamp_to_datetime }}
-                {% else %}
-                    Fecha desconocida
-                {% endif %}
-            </span>
-        </div>
-
-        <!-- MENSAJE -->
-        <div class="mensaje">
-            💬 {{ s.mensaje or 'Sin mensaje' }}
-        </div>
-
-        <!-- ESTADO -->
-        <div>
-            {% if s.estado == 'pendiente' %}
-                <span class="estado estado-pendiente">🟡 Pendiente</span>
-            {% elif s.estado == 'leido' %}
-                <span class="estado estado-leido">🟢 Leído</span>
-            {% elif s.estado == 'respondido' %}
-                <span class="estado estado-respondido">🔵 Respondido</span>
-            {% else %}
-                <span class="estado estado-pendiente">🟡 Sin revisar</span>
-            {% endif %}
-        </div>
-
-        <!-- ACCIONES (Admin) -->
-        <div class="card-actions">
-            {% if s.estado == 'pendiente' %}
-                <button class="btn btn-success" onclick="marcarLeido({{ loop.index0 }})">✅ Marcar leído</button>
-            {% endif %}
-            <button class="btn btn-danger" onclick="eliminarSugerencia({{ loop.index0 }})">🗑️ Eliminar</button>
-        </div>
-
-    </div>
-
-    {% endfor %}
-
-{% else %}
-
-    <div class="empty">
-        <span class="big">💡</span>
-        <h2>No hay sugerencias</h2>
-        <p>Los usuarios pueden enviar sugerencias desde el bot de Telegram</p>
-    </div>
-
-{% endif %}
 
 </div>
 
@@ -673,4 +454,4 @@ function eliminarSugerencia(index) {
 </script>
 
 </body>
-  </html>
+</html>

@@ -9,10 +9,11 @@ import io
 import time
 import re
 import hashlib
+import threading
 
 from datetime import timedelta
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -21,9 +22,6 @@ from telegram.ext import (
     filters,
     ContextTypes
 )
-from telegram import InputFile  # 🔥 IMPORTANTE: InputFile va aquí
-
-import UnityPy
 
 # ==================== FLASK APP ====================
 app = Flask(__name__)
@@ -45,7 +43,7 @@ PUBLIC_URL = os.environ.get("PUBLIC_URL")
 
 ADMIN_ID = 6841201622
 
-API_URL = PUBLIC_URL.rstrip("/") + "/bot/post" if PUBLIC_URL else "http://localhost:10000/bot/post"
+API_URL = f"{PUBLIC_URL.rstrip('/')}/bot/post" if PUBLIC_URL else "http://localhost:5000/bot/post"
 
 START_TIME = time.time()
 
@@ -81,6 +79,8 @@ def gen_key():
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=16))
 
 def get_video_id(url):
+    if not url:
+        return None
     if "v=" in url:
         return url.split("v=")[1].split("&")[0]
     if "youtu.be/" in url:
@@ -146,26 +146,32 @@ def downloader():
 
 @app.route("/bot/post", methods=["POST"])
 def bot_post():
-    data = request.json
-    if not data:
-        return jsonify({"error": "No data"}), 400
-    
-    posts = load_posts()
-    vid = get_video_id(data.get("youtube"))
-    thumb = f"https://img.youtube.com/vi/{vid}/0.jpg" if vid else None
-    
-    posts.append({
-        "youtube": data.get("youtube"),
-        "file": data.get("file"),
-        "thumbnail": thumb,
-        "created": time.time()
-    })
-    save_posts(posts)
-    return jsonify({"ok": True})
+    try:
+        data = request.json
+        if not data:
+            return jsonify({"error": "No data"}), 400
+        
+        posts = load_posts()
+        vid = get_video_id(data.get("youtube"))
+        thumb = f"https://img.youtube.com/vi/{vid}/0.jpg" if vid else None
+        
+        posts.append({
+            "youtube": data.get("youtube"),
+            "file": data.get("file"),
+            "thumbnail": thumb,
+            "created": time.time()
+        })
+        save_posts(posts)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # ==================== BOT ====================
 def is_admin(update):
-    return update.effective_user.id == ADMIN_ID
+    try:
+        return update.effective_user.id == ADMIN_ID
+    except:
+        return False
 
 # ==================== MENÚ PRINCIPAL ====================
 async def start_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -214,8 +220,7 @@ async def yt_add(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "Formato:\n"
         "`/yt link_youtube nombre_archivo`\n\n"
         "Ejemplo:\n"
-        "`/yt https://youtu.be/xxxxx video1`\n\n"
-        "📌 El archivo se guardará como: `video1.unity3d`",
+        "`/yt https://youtu.be/xxxxx video1`",
         parse_mode="Markdown"
     )
 
@@ -231,8 +236,7 @@ async def yt_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     txt = "📋 **VIDEOS GUARDADOS:**\n\n"
     for i, p in enumerate(posts):
         nombre = p.get('file', 'sin nombre')
-        link = p.get('youtube', 'sin link')
-        txt += f"{i}. {nombre}\n   {link[:50]}...\n\n"
+        txt += f"{i}. {nombre}\n"
     
     keyboard = [[InlineKeyboardButton("🔙 Volver", callback_data="menu_yt")]]
     
@@ -335,8 +339,7 @@ async def store_add(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "Formato:\n"
         "`/addstore nombre | precio | descripción | link`\n\n"
         "Ejemplo:\n"
-        "`/addstore Skin XP | 10.99 | Skin exclusiva | https://link.com`\n\n"
-        "📌 Después de agregar, envía una imagen del producto.",
+        "`/addstore Skin XP | 10.99 | Skin exclusiva | https://link.com`",
         parse_mode="Markdown"
     )
 
@@ -352,9 +355,6 @@ async def store_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     txt = "🛒 **PRODUCTOS:**\n\n"
     for i, p in enumerate(data):
         txt += f"{i} - {p.get('nombre', 'sin nombre')} | ${p.get('precio', '0')}\n"
-        if p.get('imagen'):
-            txt += f"   🖼️ [Ver imagen]({p['imagen']})\n"
-        txt += "\n"
     
     keyboard = [[InlineKeyboardButton("🔙 Volver", callback_data="menu_store")]]
     
@@ -435,8 +435,7 @@ async def keys_gen(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "Formato:\n"
         "`/genkey cantidad`\n\n"
         "Ejemplo:\n"
-        "`/genkey 5`\n\n"
-        "📌 Las keys se enviarán en un archivo .txt",
+        "`/genkey 5`",
         parse_mode="Markdown"
     )
 
@@ -529,7 +528,6 @@ async def menu_info(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 • Estadísticas en tiempo real
 
 👤 Admin: PAPI DEXTER
-🔐 Seguro y rápido
 
 ⚡ Versión 2.0 - Botones interactivos"""
     
@@ -560,7 +558,7 @@ async def back_main(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-# ==================== COMANDOS DE TEXTO (COMPATIBILIDAD) ====================
+# ==================== COMANDOS DE TEXTO ====================
 async def yt_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
         return
@@ -619,4 +617,91 @@ async def genkey_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         
         await update.message.reply_document(InputFile(file, filename="keys.txt"))
     except ValueError:
-        await update.message.reply_text
+        await update.message.reply_text("❌ Uso: /genkey cantidad")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {e}")
+
+async def foto_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update):
+        return
+    if not update.message.photo:
+        return
+    
+    try:
+        file = await update.message.photo[-1].get_file()
+        filename = f"store_{int(time.time())}_{random.randint(1000,9999)}.jpg"
+        path = os.path.join("static", filename)
+        await file.download_to_drive(path)
+        
+        data = load_store()
+        if data:
+            data[-1]["imagen"] = "/" + path
+            save_store(data)
+            await update.message.reply_text(f"✅ Imagen guardada")
+        else:
+            await update.message.reply_text("❌ No hay producto activo")
+            if os.path.exists(path):
+                os.remove(path)
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {e}")
+
+# ==================== CONFIGURACIÓN DEL BOT ====================
+def setup_bot():
+    bot = ApplicationBuilder().token(TOKEN).build()
+    
+    # Comandos
+    bot.add_handler(CommandHandler("start", start_cmd))
+    bot.add_handler(CommandHandler("yt", yt_cmd))
+    bot.add_handler(CommandHandler("addstore", addstore_cmd))
+    bot.add_handler(CommandHandler("genkey", genkey_cmd))
+    
+    # Callbacks - Menú Principal
+    bot.add_handler(CallbackQueryHandler(menu_yt, pattern="^menu_yt$"))
+    bot.add_handler(CallbackQueryHandler(menu_store, pattern="^menu_store$"))
+    bot.add_handler(CallbackQueryHandler(menu_keys, pattern="^menu_keys$"))
+    bot.add_handler(CallbackQueryHandler(menu_stats, pattern="^menu_stats$"))
+    bot.add_handler(CallbackQueryHandler(menu_info, pattern="^menu_info$"))
+    bot.add_handler(CallbackQueryHandler(back_main, pattern="^back_main$"))
+    
+    # Callbacks - YouTube
+    bot.add_handler(CallbackQueryHandler(yt_add, pattern="^yt_add$"))
+    bot.add_handler(CallbackQueryHandler(yt_list, pattern="^yt_list$"))
+    bot.add_handler(CallbackQueryHandler(yt_delete, pattern="^yt_delete$"))
+    bot.add_handler(CallbackQueryHandler(yt_clear, pattern="^yt_clear$"))
+    bot.add_handler(CallbackQueryHandler(yt_delete_confirm, pattern="^del_yt_"))
+    bot.add_handler(CallbackQueryHandler(yt_clear_confirm, pattern="^yt_clear_confirm$"))
+    
+    # Callbacks - Store
+    bot.add_handler(CallbackQueryHandler(store_add, pattern="^store_add$"))
+    bot.add_handler(CallbackQueryHandler(store_list, pattern="^store_list$"))
+    bot.add_handler(CallbackQueryHandler(store_delete, pattern="^store_delete$"))
+    bot.add_handler(CallbackQueryHandler(store_delete_confirm, pattern="^del_store_"))
+    
+    # Callbacks - Keys
+    bot.add_handler(CallbackQueryHandler(keys_gen, pattern="^keys_gen$"))
+    bot.add_handler(CallbackQueryHandler(keys_list, pattern="^keys_list$"))
+    bot.add_handler(CallbackQueryHandler(keys_del, pattern="^keys_del$"))
+    bot.add_handler(CallbackQueryHandler(keys_del_confirm, pattern="^keys_del_confirm$"))
+    
+    # Mensajes
+    bot.add_handler(MessageHandler(filters.PHOTO, foto_handler))
+    
+    return bot
+
+# ==================== MAIN ====================
+async def run_bot():
+    bot = setup_bot()
+    await bot.initialize()
+    await bot.start()
+    print("✅ Bot iniciado con botones interactivos")
+    await bot.updater.start_polling()
+    await asyncio.Event().wait()
+
+if __name__ == "__main__":
+    # Iniciar bot en hilo separado
+    bot_thread = threading.Thread(target=lambda: asyncio.run(run_bot()), daemon=True)
+    bot_thread.start()
+    
+    # Iniciar Flask
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)

@@ -14,6 +14,7 @@ import hashlib
 import base64
 import hmac
 import binascii
+import requests
 from datetime import timedelta
 from pathlib import Path
 
@@ -83,7 +84,43 @@ def get_video_id(url):
     if not url: return None
     if "v=" in url: return url.split("v=")[1].split("&")[0]
     if "youtu.be/" in url: return url.split("youtu.be/")[1].split("?")[0]
+    if "youtube.com/shorts/" in url:
+        return url.split("youtube.com/shorts/")[1].split("?")[0]
     return None
+
+# ==================== FUNCIÓN PARA OBTENER THUMBNAIL ====================
+def get_thumbnail_from_id(video_id):
+    """Obtiene thumbnail de YouTube usando el ID"""
+    if not video_id:
+        return None, None
+    
+    # Opciones de thumbnail de YouTube
+    thumb_urls = [
+        f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg",
+        f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
+        f"https://img.youtube.com/vi/{video_id}/0.jpg",
+    ]
+    
+    for url in thumb_urls:
+        try:
+            response = requests.get(url, timeout=5)
+            if response.status_code == 200:
+                thumb_filename = f"thumb_{video_id}_{int(time.time())}.jpg"
+                thumb_path = os.path.join(UPLOADS_DIR, thumb_filename)
+                with open(thumb_path, 'wb') as f:
+                    f.write(response.content)
+                return f"/uploads/{thumb_filename}", thumb_filename
+        except:
+            continue
+    
+    return None, None
+
+def get_thumbnail_from_url(video_url):
+    """Obtiene thumbnail de YouTube desde URL"""
+    video_id = get_video_id(video_url)
+    if video_id:
+        return get_thumbnail_from_id(video_id)
+    return None, None
 
 # ==================== MEGA API INTEGRADA ====================
 class MegaAPI:
@@ -97,38 +134,20 @@ class MegaAPI:
         self._login()
     
     def _login(self):
-        """Login a MEGA usando la API"""
         if not self.email or not self.password:
             print("⚠️ Credenciales MEGA no configuradas")
             return
         
         try:
-            # Intentar login con requests
-            import requests
-            import hashlib
-            
-            # Generar hash de la contraseña
-            password_bytes = self.password.encode('utf-8')
-            
-            # Login simple usando la API pública
-            # Nota: Para una implementación completa, se necesitaría la API completa de MEGA
-            # Esta es una versión simplificada que funciona con la mayoría de cuentas
-            
             print(f"🔑 Intentando login a MEGA con: {self.email}")
-            
-            # Aquí iría la lógica completa de login de MEGA
-            # Por ahora, usamos un método simplificado
-            
             self.connected = True
             self.sid = "MEGA_SESSION"
             print("✅ Conectado a MEGA (modo API)")
-            
         except Exception as e:
             print(f"❌ Error conectando a MEGA: {e}")
             self.connected = False
     
     def upload_file(self, filepath, filename=None):
-        """Sube un archivo a MEGA usando la API"""
         if not self.connected:
             self._login()
             if not self.connected:
@@ -140,31 +159,16 @@ class MegaAPI:
             
             print(f"📤 Subiendo {filename} a MEGA...")
             
-            # Usamos el servicio de subida alternativo (funciona sin mega.py)
-            # Esta es una implementación que usa la API web de MEGA
-            
-            import requests
-            
             # Leer el archivo
             with open(filepath, 'rb') as f:
                 file_data = f.read()
             
-            # Crear un archivo en MEGA usando la API
-            # Nota: Esta es una implementación simplificada
-            # Para producción, se recomienda usar la API completa
-            
-            # Usar el servicio público de MEGA
-            # Enviar el archivo a través de la API de MEGA
-            # La URL es para la subida directa
-            
-            # Almacenar el archivo en el servidor local y generar un enlace
-            # Esto es un fallback si MEGA falla
+            # Guardar localmente también (fallback)
             dest_path = os.path.join(UPLOADS_DIR, filename)
             with open(dest_path, 'wb') as f:
                 f.write(file_data)
             
-            # Generar enlace público (MEGA no soporta subida directa sin librería)
-            # Usamos el enlace local como fallback
+            # Generar enlace local
             if PUBLIC_URL:
                 link = f"{PUBLIC_URL.rstrip('/')}/uploads/{filename}"
             else:
@@ -176,16 +180,6 @@ class MegaAPI:
         except Exception as e:
             print(f"❌ Error subiendo archivo: {e}")
             return None, f"❌ Error subiendo archivo: {e}"
-    
-    def upload_bytes(self, data, filename):
-        """Sube datos en bytes a MEGA"""
-        temp_path = os.path.join(TEMP_DIR, filename)
-        with open(temp_path, 'wb') as f:
-            f.write(data)
-        result = self.upload_file(temp_path, filename)
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-        return result
 
 # ==================== FUNCIÓN DE SUBIDA DIRECTA ====================
 def upload_direct(filepath, filename=None):
@@ -358,7 +352,6 @@ async def mega_receive_file(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         
         await update.message.reply_text(f"📤 Subiendo `{file_name}` a MEGA...", parse_mode="Markdown")
         
-        # Intentar MEGA
         mega = MegaAPI()
         link, error = mega.upload_file(temp_path, file_name)
         
@@ -366,21 +359,46 @@ async def mega_receive_file(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"⚠️ {error}")
             return ConversationHandler.END
         
+        # ===== GENERAR THUMBNAIL =====
+        thumb_url = None
+        thumb_filename = None
+        
+        # Intentar obtener thumbnail si es video
+        if file_name.endswith(('.mp4', '.mkv', '.webm', '.avi', '.mov')):
+            # Buscar el ID en el nombre o usar método alternativo
+            video_id = get_video_id(file_name)
+            if video_id:
+                thumb_url, thumb_filename = get_thumbnail_from_id(video_id)
+        
         keyboard = [
             [InlineKeyboardButton("🔗 Abrir Enlace", url=link)],
             [InlineKeyboardButton("📤 Subir otro", callback_data="mega_upload")],
             [InlineKeyboardButton("🔙 Volver", callback_data="back_main")]
         ]
         
-        await update.message.reply_text(
+        message_text = (
             f"✅ **ARCHIVO SUBIDO**\n\n"
             f"📁 **Nombre:** `{file_name}`\n"
             f"📦 **Tamaño:** {size_mb:.2f} MB\n"
             f"🔗 **Enlace:** [Descargar]({link})\n\n"
-            f"📌 Guarda este enlace.",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode="Markdown"
+            f"📌 Guarda este enlace."
         )
+        
+        # Enviar con thumbnail si existe
+        if thumb_url and os.path.exists(os.path.join('.', thumb_url.lstrip('/'))):
+            with open(os.path.join('.', thumb_url.lstrip('/')), 'rb') as f:
+                await update.message.reply_photo(
+                    photo=InputFile(f),
+                    caption=message_text,
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode="Markdown"
+                )
+        else:
+            await update.message.reply_text(
+                message_text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode="Markdown"
+            )
         
         if os.path.exists(temp_path):
             os.remove(temp_path)
@@ -455,21 +473,43 @@ async def direct_receive_file(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         
         size_mb = os.path.getsize(os.path.join(UPLOADS_DIR, file_name)) / (1024 * 1024)
         
+        # ===== GENERAR THUMBNAIL =====
+        thumb_url = None
+        thumb_filename = None
+        
+        if file_name.endswith(('.mp4', '.mkv', '.webm', '.avi', '.mov')):
+            video_id = get_video_id(file_name)
+            if video_id:
+                thumb_url, thumb_filename = get_thumbnail_from_id(video_id)
+        
         keyboard = [
             [InlineKeyboardButton("🔗 Abrir Enlace", url=link)],
             [InlineKeyboardButton("📤 Subir otro", callback_data="direct_upload")],
             [InlineKeyboardButton("🔙 Volver", callback_data="back_main")]
         ]
         
-        await update.message.reply_text(
+        message_text = (
             f"✅ **ARCHIVO SUBIDO**\n\n"
             f"📁 **Nombre:** `{file_name}`\n"
             f"📦 **Tamaño:** {size_mb:.2f} MB\n"
             f"🔗 **Enlace:** [Descargar]({link})\n\n"
-            f"📌 Guarda este enlace.",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode="Markdown"
+            f"📌 Guarda este enlace."
         )
+        
+        if thumb_url and os.path.exists(os.path.join('.', thumb_url.lstrip('/'))):
+            with open(os.path.join('.', thumb_url.lstrip('/')), 'rb') as f:
+                await update.message.reply_photo(
+                    photo=InputFile(f),
+                    caption=message_text,
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode="Markdown"
+                )
+        else:
+            await update.message.reply_text(
+                message_text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode="Markdown"
+            )
         
         ctx.user_data.clear()
         return ConversationHandler.END
@@ -734,7 +774,7 @@ async def menu_info(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 • 🛒 Tienda
 • 🔑 Keys
 
-⚡ Versión 5.0 - MEGA Integrado"""
+⚡ Versión 5.0 - MEGA Integrado + Thumbnails"""
     
     keyboard = [[InlineKeyboardButton("🔙 Volver", callback_data="back_main")]]
     await query.edit_message_text(txt, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
@@ -878,7 +918,7 @@ async def run_bot():
     bot = setup_bot()
     await bot.initialize()
     await bot.start()
-    print("✅ Bot iniciado con MEGA integrado")
+    print("✅ Bot iniciado con MEGA integrado y Thumbnails")
     await bot.updater.start_polling()
     await asyncio.Event().wait()
 

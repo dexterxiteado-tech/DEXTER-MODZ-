@@ -1,102 +1,237 @@
-
 <!DOCTYPE html>
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Store</title>
+<title>Store - PAPI DEXTER</title>
 
 <style>
-body{
-    background:black;
-    color:#22c55e;
-    font-family:monospace;
-    margin:0;
-    padding:10px;
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: #0b1220;
+    color: white;
+    font-family: 'Segoe UI', sans-serif;
+    margin: 0;
+    padding: 20px;
+    min-height: 100vh;
+}
+
+/* HEADER */
+.header {
+    max-width: 900px;
+    margin: 0 auto 25px auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid #22c55e;
+    padding-bottom: 15px;
+}
+
+.header h1 {
+    color: #22c55e;
+    font-size: 26px;
+}
+
+.header .back {
+    color: #888;
+    text-decoration: none;
+    font-size: 14px;
+    padding: 8px 16px;
+    border: 1px solid #333;
+    border-radius: 8px;
+    transition: 0.3s;
+}
+
+.header .back:hover {
+    border-color: #22c55e;
+    color: #22c55e;
 }
 
 /* CONTENEDOR */
-.container{
-    max-width:900px;
-    margin:auto;
+.container {
+    max-width: 900px;
+    margin: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
 }
 
 /* CARD */
-.card{
-    display:flex;
-    gap:12px;
-    border:1px solid #22c55e;
-    padding:12px;
-    margin-bottom:12px;
-    border-radius:12px;
-    align-items:center;
-    transition:0.3s;
+.card {
+    display: flex;
+    gap: 16px;
+    border: 1px solid #22c55e;
+    padding: 16px;
+    border-radius: 12px;
+    align-items: center;
+    transition: 0.3s;
+    background: #111827;
 }
 
 /* HOVER */
-.card:hover{
-    box-shadow:0 0 10px #22c55e;
+.card:hover {
+    box-shadow: 0 0 20px rgba(34, 197, 94, 0.2);
+    border-color: #4ade80;
+    transform: translateY(-2px);
 }
 
-/* IMAGEN */
-.card img{
-    width:90px;
-    height:120px;
-    object-fit:cover;
-    border-radius:8px;
+/* IMAGEN DEL PRODUCTO */
+.card img {
+    width: 120px;
+    height: 150px;
+    object-fit: cover;
+    border-radius: 8px;
+    background: #0a0a0a;
+    border: 1px solid #1e293b;
+    flex-shrink: 0;
+}
+
+/* IMAGEN POR DEFECTO (cuando no hay imagen) */
+.card .no-image {
+    width: 120px;
+    height: 150px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #1a1a2e, #16213e);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 50px;
+    color: #333;
+    border: 1px solid #1e293b;
+    flex-shrink: 0;
 }
 
 /* INFO */
-.info{
-    flex:1;
-    display:flex;
-    flex-direction:column;
-    gap:4px;
+.info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
 }
 
-/* TEXTO */
-.info h2{
-    margin:0;
-    font-size:16px;
+/* NOMBRE */
+.info h2 {
+    margin: 0;
+    font-size: 18px;
+    color: #fff;
+    font-weight: bold;
 }
 
-.info p{
-    margin:0;
-    font-size:13px;
+/* DESCRIPCIÓN */
+.info .desc {
+    margin: 0;
+    font-size: 14px;
+    color: #aaa;
+    line-height: 1.4;
 }
 
 /* PRECIO */
-.price{
-    font-size:15px;
-    font-weight:bold;
+.info .price {
+    font-size: 20px;
+    font-weight: bold;
+    color: #22c55e;
+    margin: 4px 0;
 }
 
-/* BOTÓN */
-.btn{
-    margin-top:6px;
-    padding:10px;
-    font-size:14px;
-    border:none;
-    border-radius:6px;
-    background:#22c55e;
-    color:black;
-    font-weight:bold;
+.info .price .simbolo {
+    color: #ff8c00;
+}
+
+/* BOTÓN COMPRAR */
+.btn {
+    margin-top: 8px;
+    padding: 12px 24px;
+    font-size: 15px;
+    border: none;
+    border-radius: 8px;
+    background: #22c55e;
+    color: black;
+    font-weight: bold;
+    cursor: pointer;
+    transition: 0.3s;
+    text-decoration: none;
+    display: inline-block;
+    text-align: center;
+}
+
+.btn:hover {
+    background: #16a34a;
+    transform: scale(1.03);
+}
+
+.btn:active {
+    transform: scale(0.95);
+}
+
+/* VACÍO */
+.empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: #666;
+}
+
+.empty .big {
+    font-size: 60px;
+    display: block;
+    margin-bottom: 15px;
+}
+
+.empty h2 {
+    color: #888;
+    font-size: 22px;
+}
+
+.empty p {
+    color: #444;
+    font-size: 14px;
+    margin-top: 10px;
 }
 
 /* 📱 MODO TELÉFONO */
-@media(max-width:600px){
-    .card{
-        flex-direction:column;
-        align-items:flex-start;
+@media (max-width: 600px) {
+    body {
+        padding: 10px;
     }
 
-    .card img{
-        width:100%;
-        height:auto;
+    .header {
+        flex-direction: column;
+        gap: 10px;
+        text-align: center;
     }
 
-    .btn{
-        width:100%;
-        text-align:center;
+    .header h1 {
+        font-size: 20px;
+    }
+
+    .card {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 12px;
+    }
+
+    .card img {
+        width: 100%;
+        height: 180px;
+    }
+
+    .card .no-image {
+        width: 100%;
+        height: 180px;
+        font-size: 40px;
+    }
+
+    .btn {
+        width: 100%;
+        text-align: center;
+    }
+
+    .info {
+        width: 100%;
     }
 }
 </style>
@@ -104,27 +239,53 @@ body{
 
 <body>
 
+<div class="header">
+    <h1>🛒 TIENDA</h1>
+    <a href="/panel" class="back">🔙 Volver al Panel</a>
+</div>
+
 <div class="container">
 
-{% for p in productos %}
-<div class="card">
+{% if productos %}
 
-    {% if p.imagen %}
-    <img src="{{ p.imagen }}">
-    {% endif %}
+    {% for p in productos %}
 
-    <div class="info">
-        <h2>{{ p.nombre }}</h2>
-        <p>{{ p.descripcion }}</p>
-        <p class="price">💲 {{ p.precio }}</p>
+    <div class="card">
 
-        <a href="{{ p.link }}" target="_blank">
-            <button class="btn">💳 Comprar</button>
-        </a>
+        <!-- IMAGEN DEL PRODUCTO -->
+        {% if p.imagen and p.imagen != 'None' and p.imagen != 'null' %}
+            <img src="{{ p.imagen }}" alt="{{ p.nombre }}" loading="lazy">
+        {% else %}
+            <div class="no-image">🛍️</div>
+        {% endif %}
+
+        <div class="info">
+
+            <h2>{{ p.nombre or 'Sin nombre' }}</h2>
+            <p class="desc">{{ p.descripcion or 'Sin descripción' }}</p>
+            <p class="price"><span class="simbolo">$</span>{{ p.precio or '0' }}</p>
+
+            {% if p.link and p.link != 'None' %}
+                <a href="{{ p.link }}" target="_blank" class="btn">💳 Comprar</a>
+            {% else %}
+                <button class="btn" style="background: #444; cursor: not-allowed;">📦 Sin enlace</button>
+            {% endif %}
+
+        </div>
+
     </div>
 
-</div>
-{% endfor %}
+    {% endfor %}
+
+{% else %}
+
+    <div class="empty">
+        <span class="big">🛒</span>
+        <h2>No hay productos</h2>
+        <p>Agrega productos desde el bot de Telegram</p>
+    </div>
+
+{% endif %}
 
 </div>
 

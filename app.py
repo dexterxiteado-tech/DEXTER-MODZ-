@@ -210,11 +210,8 @@ def is_admin(update):
 UPLOAD_WAITING_FILE = 1
 
 # ==================== MENÚ PRINCIPAL ====================
-async def start_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update):
-        await update.message.reply_text("⛔ No autorizado")
-        return
-    
+async def show_main_menu(update_or_query, ctx):
+    """Función para mostrar el menú principal desde cualquier lugar"""
     web_url = PUBLIC_URL or "https://dexter-modz-sk.onrender.com"
     
     keyboard = [
@@ -227,15 +224,37 @@ async def start_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("ℹ️ Info", callback_data="menu_info")]
     ]
     
-    await update.message.reply_text(
-        f"🤖 **PAPI DEXTER BOT**\n\n"
-        f"🌐 **Web:** {web_url}\n\n"
-        "📤 **Sube archivos a tu web**\n"
-        "📹 **Agrega videos de YouTube**\n\n"
-        "Selecciona una opción:",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="Markdown"
-    )
+    message = f"🤖 **PAPI DEXTER BOT**\n\n🌐 **Web:** {web_url}\n\n📤 **Sube archivos a tu web**\n📹 **Agrega videos de YouTube**\n\nSelecciona una opción:"
+    
+    # Determinar si es un mensaje o un callback
+    if hasattr(update_or_query, 'message'):
+        # Es un mensaje
+        await update_or_query.message.reply_text(
+            message,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown"
+        )
+    elif hasattr(update_or_query, 'edit_message_text'):
+        # Es un callback query
+        await update_or_query.edit_message_text(
+            message,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown"
+        )
+    else:
+        # Es un update directo
+        await update_or_query.reply_text(
+            message,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown"
+        )
+
+async def start_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update):
+        await update.message.reply_text("⛔ No autorizado")
+        return
+    
+    await show_main_menu(update, ctx)
 
 # ==================== SUBIR ARCHIVO CON OPCIÓN DE BORRAR ====================
 async def upload_file_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -273,7 +292,7 @@ async def upload_file_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         InlineKeyboardButton("📤 Subir Archivo", callback_data="upload_start")
     ])
     keyboard.append([
-        InlineKeyboardButton("❌ Cancelar", callback_data="upload_cancel")
+        InlineKeyboardButton("🔙 Menú Principal", callback_data="back_main")
     ])
     
     message = "📤 **SUBIR ARCHIVO**\n\n"
@@ -418,28 +437,27 @@ async def receive_file(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         
         size_mb = os.path.getsize(os.path.join(UPLOADS_DIR, final_name)) / (1024 * 1024)
         
-        keyboard = [
-            [InlineKeyboardButton("🔗 Abrir Enlace", url=link)],
-            [InlineKeyboardButton("📤 Subir otro", callback_data="upload_file")],
-            [InlineKeyboardButton("🔙 Volver", callback_data="back_main")]
-        ]
-        
+        # Mostrar mensaje de éxito
         await update.message.reply_text(
             f"✅ **ARCHIVO SUBIDO**\n\n"
             f"📁 **Nombre:** `{final_name}`\n"
             f"📦 **Tamaño:** {size_mb:.2f} MB\n"
             f"🔗 **Enlace:** [Descargar]({link})\n\n"
             f"📌 Guarda este enlace.",
-            reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="Markdown"
         )
         
+        # Volver al menú principal automáticamente
         ctx.user_data.clear()
+        await asyncio.sleep(1)
+        await show_main_menu(update, ctx)
         return ConversationHandler.END
         
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {e}")
         ctx.user_data.clear()
+        await asyncio.sleep(1)
+        await show_main_menu(update, ctx)
         return ConversationHandler.END
 
 async def upload_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -447,6 +465,8 @@ async def upload_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     ctx.user_data.clear()
     await query.edit_message_text("❌ Subida cancelada", parse_mode="Markdown")
+    await asyncio.sleep(1)
+    await show_main_menu(query, ctx)
     return ConversationHandler.END
 
 # ==================== MENÚ YOUTUBE ====================
@@ -459,7 +479,7 @@ async def menu_yt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("📋 Listar Videos", callback_data="yt_list")],
         [InlineKeyboardButton("🗑️ Eliminar Video", callback_data="yt_delete")],
         [InlineKeyboardButton("🧹 Limpiar Todo", callback_data="yt_clear")],
-        [InlineKeyboardButton("🔙 Volver", callback_data="back_main")]
+        [InlineKeyboardButton("🔙 Menú Principal", callback_data="back_main")]
     ]
     
     await query.edit_message_text(
@@ -476,9 +496,12 @@ async def yt_add(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "Formato:\n"
         "`/yt link_youtube nombre`\n\n"
         "Ejemplo:\n"
-        "`/yt https://youtu.be/xxxxx video1`",
+        "`/yt https://youtu.be/xxxxx video1`\n\n"
+        "🔙 Volverá al menú automáticamente.",
         parse_mode="Markdown"
     )
+    await asyncio.sleep(2)
+    await show_main_menu(query, ctx)
 
 async def yt_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -486,6 +509,8 @@ async def yt_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     posts = load_posts()
     if not posts:
         await query.edit_message_text("📋 No hay videos.")
+        await asyncio.sleep(1.5)
+        await menu_yt(update, ctx)
         return
     
     for i, p in enumerate(posts):
@@ -508,12 +533,8 @@ async def yt_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         else:
             await query.message.reply_text(message, parse_mode="Markdown")
     
-    keyboard = [[InlineKeyboardButton("🔙 Volver", callback_data="menu_yt")]]
-    await query.message.reply_text(
-        "📋 **FIN DE LA LISTA**",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="Markdown"
-    )
+    await asyncio.sleep(1)
+    await menu_yt(update, ctx)
 
 async def yt_delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -521,12 +542,20 @@ async def yt_delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     posts = load_posts()
     if not posts:
         await query.edit_message_text("📋 No hay videos.")
+        await asyncio.sleep(1.5)
+        await menu_yt(update, ctx)
         return
+    
     keyboard = []
     for i, p in enumerate(posts):
         keyboard.append([InlineKeyboardButton(f"🗑️ {i} - {p.get('file', 'video')[:20]}", callback_data=f"del_yt_{i}")])
     keyboard.append([InlineKeyboardButton("🔙 Volver", callback_data="menu_yt")])
-    await query.edit_message_text("🗑️ **SELECCIONA VIDEO:**", reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    await query.edit_message_text(
+        "🗑️ **SELECCIONA VIDEO:**",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
 
 async def yt_delete_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -542,23 +571,32 @@ async def yt_delete_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("❌ Error")
     except:
         await query.edit_message_text("❌ Error")
-    keyboard = [[InlineKeyboardButton("🔙 Volver", callback_data="menu_yt")]]
-    await query.edit_message_text("🗑️ **ELIMINADO**", reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    await asyncio.sleep(1)
+    await menu_yt(update, ctx)
 
 async def yt_clear(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    
     keyboard = [
         [InlineKeyboardButton("✅ SI", callback_data="yt_clear_confirm")],
         [InlineKeyboardButton("❌ NO", callback_data="menu_yt")]
     ]
-    await query.edit_message_text("⚠️ **¿ELIMINAR TODOS?**", reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    await query.edit_message_text(
+        "⚠️ **¿ELIMINAR TODOS?**",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
 
 async def yt_clear_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     save_posts([])
     await query.edit_message_text("🧹 Todos eliminados.")
+    await asyncio.sleep(1)
+    await menu_yt(update, ctx)
 
 # ==================== MENÚ TIENDA ====================
 async def menu_store(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -569,7 +607,7 @@ async def menu_store(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("➕ Agregar", callback_data="store_add")],
         [InlineKeyboardButton("📋 Listar", callback_data="store_list")],
         [InlineKeyboardButton("🗑️ Eliminar", callback_data="store_delete")],
-        [InlineKeyboardButton("🔙 Volver", callback_data="back_main")]
+        [InlineKeyboardButton("🔙 Menú Principal", callback_data="back_main")]
     ]
     
     await query.edit_message_text(
@@ -583,9 +621,12 @@ async def store_add(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     await query.edit_message_text(
         "📦 **Agregar Producto**\n\n"
-        "`/addstore nombre | precio | desc | link`",
+        "`/addstore nombre | precio | desc | link`\n\n"
+        "🔙 Volverá al menú automáticamente.",
         parse_mode="Markdown"
     )
+    await asyncio.sleep(2)
+    await show_main_menu(query, ctx)
 
 async def store_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -593,12 +634,17 @@ async def store_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     data = load_store()
     if not data:
         await query.edit_message_text("🛒 Sin productos.")
+        await asyncio.sleep(1.5)
+        await menu_store(update, ctx)
         return
+    
     txt = "🛒 **PRODUCTOS:**\n\n"
     for i, p in enumerate(data):
         txt += f"{i}. **{p.get('nombre')}** | ${p.get('precio')}\n"
-    keyboard = [[InlineKeyboardButton("🔙 Volver", callback_data="menu_store")]]
-    await query.edit_message_text(txt, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+    
+    await query.edit_message_text(txt, parse_mode="Markdown")
+    await asyncio.sleep(2)
+    await menu_store(update, ctx)
 
 async def store_delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -606,12 +652,20 @@ async def store_delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     data = load_store()
     if not data:
         await query.edit_message_text("🛒 Sin productos.")
+        await asyncio.sleep(1.5)
+        await menu_store(update, ctx)
         return
+    
     keyboard = []
     for i, p in enumerate(data):
         keyboard.append([InlineKeyboardButton(f"🗑️ {i} - {p.get('nombre')[:20]}", callback_data=f"del_store_{i}")])
     keyboard.append([InlineKeyboardButton("🔙 Volver", callback_data="menu_store")])
-    await query.edit_message_text("🗑️ **SELECCIONA PRODUCTO:**", reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    await query.edit_message_text(
+        "🗑️ **SELECCIONA PRODUCTO:**",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
 
 async def store_delete_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -627,8 +681,9 @@ async def store_delete_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("❌ Error")
     except:
         await query.edit_message_text("❌ Error")
-    keyboard = [[InlineKeyboardButton("🔙 Volver", callback_data="menu_store")]]
-    await query.edit_message_text("🗑️ **ELIMINADO**", reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    await asyncio.sleep(1)
+    await menu_store(update, ctx)
 
 # ==================== MENÚ KEYS ====================
 async def menu_keys(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -639,7 +694,7 @@ async def menu_keys(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🔑 Generar", callback_data="keys_gen")],
         [InlineKeyboardButton("📋 Ver", callback_data="keys_list")],
         [InlineKeyboardButton("🗑️ Eliminar", callback_data="keys_del")],
-        [InlineKeyboardButton("🔙 Volver", callback_data="back_main")]
+        [InlineKeyboardButton("🔙 Menú Principal", callback_data="back_main")]
     ]
     
     await query.edit_message_text(
@@ -651,7 +706,13 @@ async def menu_keys(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def keys_gen(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    await query.edit_message_text("🔑 `/genkey cantidad`", parse_mode="Markdown")
+    await query.edit_message_text(
+        "🔑 `/genkey cantidad`\n\n"
+        "🔙 Volverá al menú automáticamente.",
+        parse_mode="Markdown"
+    )
+    await asyncio.sleep(2)
+    await show_main_menu(query, ctx)
 
 async def keys_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -659,27 +720,40 @@ async def keys_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     keys = load_keys()
     if not keys:
         await query.edit_message_text("🔑 Sin keys.")
+        await asyncio.sleep(1.5)
+        await menu_keys(update, ctx)
         return
+    
     txt = "🔑 **KEYS:**\n\n"
     for i, k in enumerate(keys):
         txt += f"{i+1}. `{k}`\n"
-    keyboard = [[InlineKeyboardButton("🔙 Volver", callback_data="menu_keys")]]
-    await query.edit_message_text(txt, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+    
+    await query.edit_message_text(txt, parse_mode="Markdown")
+    await asyncio.sleep(2)
+    await menu_keys(update, ctx)
 
 async def keys_del(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    
     keyboard = [
         [InlineKeyboardButton("✅ SI", callback_data="keys_del_confirm")],
         [InlineKeyboardButton("❌ NO", callback_data="menu_keys")]
     ]
-    await query.edit_message_text("⚠️ **¿ELIMINAR TODAS?**", reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    await query.edit_message_text(
+        "⚠️ **¿ELIMINAR TODAS?**",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
 
 async def keys_del_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     save_keys([])
     await query.edit_message_text("🗑️ Keys eliminadas.")
+    await asyncio.sleep(1)
+    await menu_keys(update, ctx)
 
 # ==================== ESTADÍSTICAS ====================
 async def menu_stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -713,13 +787,9 @@ async def menu_stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 ⏱️ Uptime: {hours}h {minutes}m"""
     
-    keyboard = [[InlineKeyboardButton("🔙 Volver", callback_data="back_main")]]
-    
-    await query.edit_message_text(
-        txt,
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="Markdown"
-    )
+    await query.edit_message_text(txt, parse_mode="Markdown")
+    await asyncio.sleep(3)
+    await show_main_menu(query, ctx)
 
 # ==================== INFO ====================
 async def menu_info(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -742,35 +812,15 @@ async def menu_info(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 ⚡ Versión 6.0 - Con Thumbnails de YouTube"""
     
-    keyboard = [[InlineKeyboardButton("🔙 Volver", callback_data="back_main")]]
-    await query.edit_message_text(txt, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+    await query.edit_message_text(txt, parse_mode="Markdown")
+    await asyncio.sleep(3)
+    await show_main_menu(query, ctx)
 
 # ==================== BACK TO MAIN ====================
 async def back_main(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    
-    web_url = PUBLIC_URL or "https://dexter-modz-sk.onrender.com"
-    
-    keyboard = [
-        [InlineKeyboardButton("📤 Subir Archivo", callback_data="upload_file")],
-        [InlineKeyboardButton("📹 YouTube", callback_data="menu_yt")],
-        [InlineKeyboardButton("🛒 Tienda", callback_data="menu_store")],
-        [InlineKeyboardButton("🔑 Keys", callback_data="menu_keys")],
-        [InlineKeyboardButton("📊 Estadísticas", callback_data="menu_stats")],
-        [InlineKeyboardButton("🌐 Mi Web", url=web_url)],
-        [InlineKeyboardButton("ℹ️ Info", callback_data="menu_info")]
-    ]
-    
-    await query.edit_message_text(
-        f"🤖 **PAPI DEXTER BOT**\n\n"
-        f"🌐 **Web:** {web_url}\n\n"
-        "📤 **Sube archivos a tu web**\n"
-        "📹 **Agrega videos de YouTube**\n\n"
-        "Selecciona una opción:",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="Markdown"
-    )
+    await show_main_menu(query, ctx)
 
 # ==================== COMANDOS ====================
 async def yt_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -792,6 +842,8 @@ async def yt_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         })
         save_posts(posts)
         await update.message.reply_text(f"✅ Video: {ctx.args[1]} con thumbnail")
+        await asyncio.sleep(1.5)
+        await show_main_menu(update, ctx)
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {e}")
 
@@ -807,6 +859,8 @@ async def addstore_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         data.append({"nombre": partes[0].strip(), "precio": partes[1].strip(), "descripcion": partes[2].strip(), "link": partes[3].strip(), "imagen": None})
         save_store(data)
         await update.message.reply_text(f"✅ Producto: {partes[0].strip()}")
+        await asyncio.sleep(1.5)
+        await show_main_menu(update, ctx)
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {e}")
 
@@ -825,6 +879,8 @@ async def genkey_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         file = io.BytesIO(txt.encode())
         file.name = "keys.txt"
         await update.message.reply_document(InputFile(file, filename="keys.txt"))
+        await asyncio.sleep(1.5)
+        await show_main_menu(update, ctx)
     except:
         await update.message.reply_text("❌ Uso: /genkey cantidad")
 

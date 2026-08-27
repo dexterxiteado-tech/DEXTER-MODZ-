@@ -180,7 +180,7 @@ def timestamp_to_datetime(timestamp):
 # ==================== SEGURIDAD WEB ====================
 @app.before_request
 def proteger():
-    libres = ["/", "/bot/post", "/webhook", "/logout", "/gato", "/downloader", "/uploads", "/static", "/suggestions"]
+    libres = ["/", "/bot/post", "/webhook", "/logout", "/gato", "/downloader", "/uploads", "/static", "/suggestions", "/suggestion"]
     if request.path.startswith("/static") or request.path.startswith("/uploads"):
         return
     if request.path in libres:
@@ -270,6 +270,30 @@ def suggestions():
         "suggestions.html",
         sugerencias=load_suggestions()
     )
+
+@app.route('/suggestion/read/<int:index>', methods=['POST'])
+def suggestion_read(index):
+    try:
+        sugerencias = load_suggestions()
+        if 0 <= index < len(sugerencias):
+            sugerencias[index]['estado'] = 'leido'
+            save_suggestions(sugerencias)
+            return jsonify({"ok": True})
+        return jsonify({"error": "Índice inválido"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/suggestion/delete/<int:index>', methods=['POST'])
+def suggestion_delete(index):
+    try:
+        sugerencias = load_suggestions()
+        if 0 <= index < len(sugerencias):
+            sugerencias.pop(index)
+            save_suggestions(sugerencias)
+            return jsonify({"ok": True})
+        return jsonify({"error": "Índice inválido"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/gato")
 def gato():

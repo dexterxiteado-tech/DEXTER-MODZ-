@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Panel</title>
+<title>Panel - PAPI DEXTER</title>
 
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600&display=swap" rel="stylesheet">
 
@@ -65,7 +65,6 @@ color:#22c55e;
 font-size:15px;
 letter-spacing:2px;
 text-shadow:0 0 10px #22c55e;
-
 white-space:nowrap;
 overflow:hidden;
 text-overflow:ellipsis;
@@ -89,6 +88,8 @@ flex-shrink:0;
 /* 🧱 CONTENIDO */
 .main{
 padding:80px 20px 20px;
+max-width: 600px;
+margin: 0 auto;
 }
 
 /* 🟩 CARDS */
@@ -103,12 +104,55 @@ border-radius:12px;
 transition:0.3s;
 font-size:16px;
 box-shadow:0 0 10px #22c55e33;
+text-decoration:none;
+color:#22c55e;
+display:block;
 }
 
 .card:hover{
 background:#111;
 transform:scale(1.05);
 box-shadow:0 0 20px #22c55e;
+}
+
+/* 🔥 CARD ESPECIAL - SUGERENCIAS */
+.card-suggestion{
+border-color: #ff8c00;
+color: #ff8c00;
+box-shadow:0 0 10px #ff8c0033;
+}
+
+.card-suggestion:hover{
+box-shadow:0 0 20px #ff8c00;
+border-color: #ff8c00;
+}
+
+/* 📊 CONTADOR */
+.badge{
+background: #ff8c00;
+color: #000;
+font-size: 12px;
+padding: 2px 10px;
+border-radius: 12px;
+font-weight: bold;
+margin-left: 8px;
+display: inline-block;
+}
+
+h1{
+text-align: center;
+font-size: 22px;
+margin-bottom: 10px;
+color: #22c55e;
+text-shadow: 0 0 20px #22c55e66;
+}
+
+.subtitle{
+text-align: center;
+color: #666;
+font-size: 13px;
+margin-top: -5px;
+margin-bottom: 20px;
 }
 </style>
 </head>
@@ -120,7 +164,7 @@ box-shadow:0 0 20px #22c55e;
 
 <!-- 🔝 NAVBAR -->
 <div class="topbar">
-  <div class="logo">DEXTER MODZ SK</div>
+  <div class="logo">⚡ DEXTER MODZ SK</div>
   <a href="/logout" class="logout">🚪 EXIT</a>
 </div>
 
@@ -128,12 +172,22 @@ box-shadow:0 0 20px #22c55e;
 <div class="main">
 
 <h1>𝘿𝙄𝘼𝙇𝙊𝙂 𝘾𝘼𝙍𝘿 𝙈𝙀𝙉𝙐</h1>
+<p class="subtitle">Selecciona una opción para continuar</p>
 
 <div class="card" onclick="location.href='/posts'">📂 FILES</div>
 <div class="card" onclick="location.href='/store'">🛒 STORE</div>
 <div class="card" onclick="location.href='/downloader'">🤖 DOWNLOADER</div>
+
+<!-- 🔥 NUEVO: SUGERENCIAS -->
+<div class="card card-suggestion" onclick="location.href='/suggestions'">
+  💡 SUGERENCIAS / SUGGESTIONS
+  {% if sugerencias_pendientes > 0 %}
+    <span class="badge">{{ sugerencias_pendientes }}</span>
+  {% endif %}
+</div>
+
 <div class="card" onclick="window.location.href='https://whatsapp.com/channel/0029VbCAFtZGZNCxxwARZ81f'">
-🍀 CHANNEL OF WHATSAPP
+🍀 CHANNEL WHATSAPP
 </div>
 
 <div class="card" onclick="location.href='/gato'">🎮 GAME</div>

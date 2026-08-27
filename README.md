@@ -1,150 +1,272 @@
-🖤 DEXTER MODZ
+<div align="center">⚡ DEXTER MODZ
 
-«Web + Bot + Sistema de gestión de contenido»
+"WEB • TELEGRAM BOT • FILES • STORE • AUTOMATION"
 
-DEXTER MODZ es una plataforma web diseñada para centralizar y administrar contenido publicado mediante un bot de Telegram. El proyecto combina una interfaz web ligera con automatización para facilitar la publicación, gestión y distribución de archivos y recursos.
+<img src="assets/creator-logo.png" width="120" alt="DEXTER MODZ Creator Logo">Una plataforma creada para centralizar contenido, automatización y herramientas digitales.
 
-🚀 Características
+""Python" (https://img.shields.io/badge/Python-3.x-3776AB?style=for-the-badge&logo=python&logoColor=white)" (#)
+""Flask" (https://img.shields.io/badge/Flask-Web-000000?style=for-the-badge&logo=flask&logoColor=white)" (#)
+""Telegram" (https://img.shields.io/badge/Telegram-Bot-26A5E4?style=for-the-badge&logo=telegram&logoColor=white)" (#)
 
-- 🔐 Sistema de inicio de sesión
-- 📂 Gestión de publicaciones
-- 🛒 Tienda integrada
-- 🤖 Bot de Telegram
-- 🔑 Sistema de claves de acceso
-- 📥 Publicación automática de contenido
-- 🎮 Sección de juegos
-- 📡 Comunicación mediante API
-- 🌌 Interfaz estilo futurista
-- ⚡ Diseño ligero y optimizado
+</div>---
 
-🤖 Bot de Telegram
+🖤 ¿Qué es DEXTER MODZ?
 
-El bot permite administrar diferentes funciones del sistema directamente desde Telegram.
+DEXTER MODZ es una plataforma web conectada con un bot de Telegram, creada para administrar publicaciones, archivos, productos y diferentes herramientas desde un único sistema.
 
-Comandos principales
+El proyecto combina un panel web, una API, un bot de Telegram y almacenamiento basado en archivos JSON.
 
-/start       Información del bot
-/yt          Publicar contenido
-/list        Ver publicaciones
-/delete      Eliminar una publicación
-/clear        Eliminar todas las publicaciones
+La idea es mantener un sistema rápido, sencillo y fácil de administrar.
 
-/addstore    Añadir producto
-/liststore   Ver productos
-/delstore    Eliminar producto
+---
 
-/stats       Estadísticas
-/ping         Comprobar estado
-/uptime      Tiempo activo
+⚡ Características
 
-/genkey      Generar claves
-/delkeysall  Eliminar todas las claves
+Función| Descripción
+🔐 Login| Sistema de acceso protegido
+📂 Files| Administración de publicaciones
+🛒 Store| Catálogo de productos
+🤖 Downloader| Acceso a herramientas de descarga
+🎮 Game| Sección de entretenimiento
+🔑 Keys| Generación y administración de claves
+📡 API| Comunicación entre el bot y la web
+🤖 Telegram| Administración mediante comandos
+🌌 UI| Interfaz futurista y responsive
 
-🌐 Panel Web
+---
 
-El panel funciona como centro de administración de la plataforma.
+🤖 Telegram Bot
 
-Desde él se puede acceder a:
+El bot permite controlar gran parte de la plataforma directamente desde Telegram.
 
-📂 FILES
-🛒 STORE
-🤖 DOWNLOADER
-🍀 CHANNEL OF WHATSAPP
-🎮 GAME
+📌 Comandos
 
-🔐 Seguridad
+/start
+/yt
+/list
+/delete
+/clear
 
-El sistema utiliza:
+/addstore
+/liststore
+/delstore
 
-- Sesiones de Flask.
-- Autenticación mediante usuario y contraseña.
-- Claves de acceso.
-- Clave maestra.
-- Protección de las rutas privadas.
-- Control de administrador para los comandos del bot.
+/stats
+/ping
+/uptime
 
-📦 Estructura
+/genkey
+/delkeysall
+
+📤 Publicar contenido
+
+/yt LINK_YOUTUBE LINK_ARCHIVO
+
+El bot envía la información a la API y la publicación queda almacenada para mostrarse posteriormente en la web.
+
+---
+
+🌐 Panel de administración
+
+El panel funciona como el centro principal de DEXTER MODZ.
+
+╭────────────────────────────╮
+│      DEXTER MODZ PANEL     │
+├────────────────────────────┤
+│ 📂 FILES                   │
+│ 🛒 STORE                   │
+│ 🤖 DOWNLOADER              │
+│ 🍀 WHATSAPP CHANNEL        │
+│ 🎮 GAME                    │
+╰────────────────────────────╯
+
+---
+
+🔐 Sistema de acceso
+
+El proyecto incorpora diferentes mecanismos de protección:
+
+Usuario + Contraseña
+        │
+        ▼
+    Access Key
+        │
+        ▼
+   Flask Session
+        │
+        ▼
+   🔓 PANEL ACCESS
+
+También existe una Master Key para el acceso administrativo.
+
+---
+
+🧩 Arquitectura
+
+                    ┌─────────────────┐
+                    │   TELEGRAM 🤖   │
+                    └────────┬────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │    BOT API 📡   │
+                    └────────┬────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │      FLASK      │
+                    │      SERVER     │
+                    └────────┬────────┘
+                             │
+                  ┌──────────┼──────────┐
+                  ▼          ▼          ▼
+              database    keys       store
+                .json      .json       .json
+                  │          │          │
+                  └──────────┼──────────┘
+                             ▼
+                    ┌─────────────────┐
+                    │    WEB PANEL 🌐 │
+                    └─────────────────┘
+
+---
+
+🌑 CREATOR
+
+<div align="center"><img src="assets/jinwoo.png" width="220" alt="Sung Jin-Woo">⚔️ DEXTER MODZ
+
+Creator & Developer
+
+«"ARISE."»
+
+Powered by creativity, code and late-night debugging.
+
+</div>---
+
+🛠️ Tecnologías
+
+🐍 Python
+🌐 Flask
+🤖 python-telegram-bot
+📡 aiohttp
+🎮 UnityPy
+🗄️ JSON
+🎨 HTML
+⚡ CSS
+🧠 JavaScript
+
+---
+
+📁 Estructura
 
 DEXTER-MODZ/
 │
 ├── app.py
-├── panel.html
-├── index.html
-├── posts.html
-├── store.html
-├── downloader.html
-├── gato.html
+├── requirements.txt
+│
+├── templates/
+│   ├── index.html
+│   ├── panel.html
+│   ├── posts.html
+│   ├── store.html
+│   ├── downloader.html
+│   └── gato.html
+│
+├── static/
+│   └── ...
 │
 ├── database.json
 ├── keys.json
 ├── store.json
 │
-├── static/
-├── templates/
+├── assets/
+│   ├── creator-logo.png
+│   └── jinwoo.png
+│
 └── README.md
 
-⚙️ Tecnologías
+---
 
-- 🐍 Python
-- 🌐 Flask
-- 🤖 python-telegram-bot
-- 📡 aiohttp
-- 🎮 UnityPy
-- 🗄️ JSON
-- 🎨 HTML / CSS / JavaScript
+🚀 Instalación
 
-📡 Funcionamiento
+1. Clonar el proyecto
 
-El flujo principal del proyecto es:
+git clone TU_REPOSITORIO
+cd DEXTER-MODZ
 
-Telegram
-   │
-   ▼
-🤖 Bot
-   │
-   ▼
-API /bot/post
-   │
-   ▼
-Flask
-   │
-   ▼
-database.json
-   │
-   ▼
-🌐 Panel Web
-
-Esto permite que una publicación enviada desde Telegram pueda aparecer posteriormente en la sección de archivos de la web.
-
-💻 Instalación
-
-Instala las dependencias:
+2. Instalar dependencias
 
 pip install -r requirements.txt
 
-Configura las variables necesarias:
+3. Configurar variables
 
-BOT_TOKEN
-PUBLIC_URL
-SECRET_KEY
-MASTER_KEY
+BOT_TOKEN=TU_TOKEN
+PUBLIC_URL=TU_URL
+SECRET_KEY=TU_SECRET
+MASTER_KEY=TU_MASTER_KEY
 
-Después ejecuta:
+4. Ejecutar
 
 python app.py
 
-🌌 DEXTER MODZ
+---
 
-Un proyecto pensado para combinar automatización, administración web y contenido digital en una sola plataforma.
+📡 Flujo de publicación
 
-╔══════════════════════════════╗
-║        DEXTER MODZ           ║
-║                              ║
-║   WEB • BOT • FILES • STORE  ║
-║                              ║
-║        ⚡ SYSTEM ONLINE ⚡     ║
-╚══════════════════════════════╝
+👤 ADMIN
+   │
+   │ /yt
+   ▼
+🤖 TELEGRAM BOT
+   │
+   ▼
+📡 /bot/post
+   │
+   ▼
+🐍 FLASK
+   │
+   ▼
+🗄️ database.json
+   │
+   ▼
+🌐 FILES
 
-📜 Licencia
+---
 
-Este proyecto es de uso personal y educativo. Respeta las licencias y derechos correspondientes de cualquier recurso de terceros que integres.
+⚡ Estado del proyecto
+
+████████████████████████████  ONLINE
+
+WEB       ████████████████████  READY
+BOT       ████████████████████  READY
+API       ████████████████████  READY
+STORE     ████████████████████  READY
+FILES     ████████████████████  READY
+
+---
+
+🖤 DEXTER MODZ
+
+No es solamente una página.
+
+Es un sistema construido para reunir:
+
+        CODE
+         +
+       DESIGN
+         +
+      AUTOMATION
+         +
+       TELEGRAM
+         +
+        WEB
+         ↓
+   ┌───────────────┐
+   │ DEXTER MODZ ⚡ │
+   └───────────────┘
+
+<div align="center">⚔️ "ARISE."
+
+DEXTER MODZ © 2026
+
+</div>

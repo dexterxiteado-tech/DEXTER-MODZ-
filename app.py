@@ -153,16 +153,12 @@ def gato():
 def downloader():
     return render_template("downloader.html")
 
-# ==================== ENDPOINT PARA EL BOT (SOLO REGISTRA) ====================
 @app.route("/bot/post", methods=["POST"])
 def bot_post():
     try:
         data = request.json
         if not data:
             return jsonify({"error": "No data"}), 400
-        
-        # ✅ SOLO REGISTRAMOS, NO GUARDAMOS 2 VECES
-        # El guardado ya lo hace la conversación
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -179,6 +175,9 @@ async def start_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
         await update.message.reply_text("⛔ No autorizado")
         return
+    
+    # ✅ LIMPIAR CUALQUIER CONVERSACIÓN PENDIENTE
+    ctx.user_data.clear()
     
     keyboard = [
         [InlineKeyboardButton("📹 YouTube", callback_data="menu_yt")],
@@ -213,10 +212,13 @@ async def menu_yt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-# ==================== AGREGAR VIDEO (SIN COMANDOS) ====================
+# ==================== AGREGAR VIDEO ====================
 async def yt_add_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    
+    # ✅ LIMPIAR DATOS ANTERIORES
+    ctx.user_data.clear()
     
     keyboard = [[InlineKeyboardButton("❌ Cancelar", callback_data="yt_cancel")]]
     
@@ -230,16 +232,14 @@ async def yt_add_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
     
-    ctx.user_data['yt_step'] = 'waiting_link'
     return WAITING_LINK
 
 async def yt_receive_link(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
-        return
+        return ConversationHandler.END
     
     link = update.message.text.strip()
     
-    # Validar link de YouTube
     if not get_video_id(link):
         await update.message.reply_text(
             "❌ **Link inválido**\n\n"
@@ -251,7 +251,6 @@ async def yt_receive_link(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return WAITING_LINK
     
     ctx.user_data['yt_link'] = link
-    ctx.user_data['yt_step'] = 'waiting_name'
     
     keyboard = [[InlineKeyboardButton("❌ Cancelar", callback_data="yt_cancel")]]
     
@@ -269,7 +268,7 @@ async def yt_receive_link(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def yt_receive_name(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
-        return
+        return ConversationHandler.END
     
     name = update.message.text.strip()
     
@@ -285,10 +284,11 @@ async def yt_receive_name(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     link = ctx.user_data.get('yt_link')
     
     if not link:
-        await update.message.reply_text("❌ Error: No hay link guardado. Vuelve a empezar.")
-        return
+        await update.message.reply_text("❌ Error: No hay link guardado. Usa /start para empezar de nuevo.")
+        ctx.user_data.clear()
+        return ConversationHandler.END
     
-    # ✅ GUARDAR SOLO UNA VEZ AQUÍ
+    # Guardar video
     posts = load_posts()
     vid = get_video_id(link)
     thumb = f"https://img.youtube.com/vi/{vid}/0.jpg" if vid else None
@@ -301,7 +301,7 @@ async def yt_receive_name(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     })
     save_posts(posts)
     
-    # ✅ SOLO NOTIFICAR AL WEBHOOK (SIN GUARDAR DE NUEVO)
+    # Notificar al webhook
     try:
         async with aiohttp.ClientSession() as s:
             await s.post(API_URL, json={"youtube": link, "file": name})
@@ -313,12 +313,13 @@ async def yt_receive_name(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"📹 **Link:** {link}\n"
         f"📁 **Archivo:** `{name}`\n"
         f"🖼️ **Thumbnail:** {thumb}\n\n"
-        f"📌 Para agregar otro, usa /start",
+        f"📌 Usa /start para volver al menú principal.",
         parse_mode="Markdown"
     )
     
+    # ✅ LIMPIAR DATOS Y TERMINAR CONVERSACIÓN
     ctx.user_data.clear()
-    return -1
+    return ConversationHandler.END
 
 async def yt_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -331,7 +332,7 @@ async def yt_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "Usa /start para volver al menú principal.",
         parse_mode="Markdown"
     )
-    return -1
+    return ConversationHandler.END
 
 # ==================== LISTAR VIDEOS ====================
 async def yt_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -427,6 +428,7 @@ async def yt_clear_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     
     save_posts([])
     await query.edit_message_text("🧹 Todos los videos eliminados.")
+    await menu_yt(update, ctx)
 
 # ==================== MENÚ TIENDA ====================
 async def menu_store(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -446,10 +448,12 @@ async def menu_store(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-# ==================== AGREGAR PRODUCTO (SIN COMANDOS) ====================
+# ==================== AGREGAR PRODUCTO ====================
 async def store_add_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    
+    ctx.user_data.clear()
     
     keyboard = [[InlineKeyboardButton("❌ Cancelar", callback_data="store_cancel")]]
     
@@ -463,12 +467,11 @@ async def store_add_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
     
-    ctx.user_data['store_step'] = 'waiting_name'
     return WAITING_STORE_NAME
 
 async def store_receive_name(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
-        return
+        return ConversationHandler.END
     
     name = update.message.text.strip()
     
@@ -477,7 +480,6 @@ async def store_receive_name(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return WAITING_STORE_NAME
     
     ctx.user_data['store_name'] = name
-    ctx.user_data['store_step'] = 'waiting_price'
     
     keyboard = [[InlineKeyboardButton("❌ Cancelar", callback_data="store_cancel")]]
     
@@ -496,7 +498,7 @@ async def store_receive_name(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def store_receive_price(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
-        return
+        return ConversationHandler.END
     
     price = update.message.text.strip()
     
@@ -505,7 +507,6 @@ async def store_receive_price(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return WAITING_STORE_PRICE
     
     ctx.user_data['store_price'] = price
-    ctx.user_data['store_step'] = 'waiting_desc'
     
     keyboard = [[InlineKeyboardButton("❌ Cancelar", callback_data="store_cancel")]]
     
@@ -522,7 +523,7 @@ async def store_receive_price(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def store_receive_desc(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
-        return
+        return ConversationHandler.END
     
     desc = update.message.text.strip()
     
@@ -531,7 +532,6 @@ async def store_receive_desc(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return WAITING_STORE_DESC
     
     ctx.user_data['store_desc'] = desc
-    ctx.user_data['store_step'] = 'waiting_link'
     
     keyboard = [[InlineKeyboardButton("❌ Cancelar", callback_data="store_cancel")]]
     
@@ -549,7 +549,7 @@ async def store_receive_desc(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def store_receive_link(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
-        return
+        return ConversationHandler.END
     
     link = update.message.text.strip()
     
@@ -557,7 +557,6 @@ async def store_receive_link(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Link inválido. Debe comenzar con http:// o https://")
         return WAITING_STORE_LINK
     
-    # Guardar producto
     data = load_store()
     data.append({
         "nombre": ctx.user_data.get('store_name'),
@@ -574,12 +573,13 @@ async def store_receive_link(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"💰 **Precio:** `{ctx.user_data.get('store_price')}`\n"
         f"📄 **Descripción:** {ctx.user_data.get('store_desc')}\n"
         f"🔗 **Link:** {link}\n\n"
-        "📸 Ahora **envía una imagen** para el producto (opcional).",
+        "📸 Ahora **envía una imagen** para el producto (opcional).\n\n"
+        "📌 Usa /start para volver al menú principal.",
         parse_mode="Markdown"
     )
     
     ctx.user_data.clear()
-    return -1
+    return ConversationHandler.END
 
 async def store_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -592,7 +592,7 @@ async def store_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "Usa /start para volver al menú principal.",
         parse_mode="Markdown"
     )
-    return -1
+    return ConversationHandler.END
 
 # ==================== LISTAR PRODUCTOS ====================
 async def store_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -686,10 +686,12 @@ async def menu_keys(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-# ==================== GENERAR KEYS (SIN COMANDOS) ====================
+# ==================== GENERAR KEYS ====================
 async def keys_gen_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    
+    ctx.user_data.clear()
     
     keyboard = [[InlineKeyboardButton("❌ Cancelar", callback_data="keys_cancel")]]
     
@@ -709,7 +711,7 @@ async def keys_gen_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def keys_receive_count(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
-        return
+        return ConversationHandler.END
     
     try:
         n = int(update.message.text.strip())
@@ -736,12 +738,12 @@ async def keys_receive_count(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_document(
         InputFile(file, filename="keys.txt"),
-        caption=f"✅ **{n} KEYS GENERADAS**\n\n📁 Archivo adjunto con todas las keys.",
+        caption=f"✅ **{n} KEYS GENERADAS**\n\n📁 Archivo adjunto con todas las keys.\n\n📌 Usa /start para volver al menú principal.",
         parse_mode="Markdown"
     )
     
     ctx.user_data.clear()
-    return -1
+    return ConversationHandler.END
 
 async def keys_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -754,7 +756,7 @@ async def keys_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "Usa /start para volver al menú principal.",
         parse_mode="Markdown"
     )
-    return -1
+    return ConversationHandler.END
 
 # ==================== LISTAR KEYS ====================
 async def keys_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -803,6 +805,7 @@ async def keys_del_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     
     save_keys([])
     await query.edit_message_text("🗑️ Todas las keys eliminadas.")
+    await menu_keys(update, ctx)
 
 # ==================== ESTADÍSTICAS ====================
 async def menu_stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -926,7 +929,8 @@ def setup_bot():
             WAITING_LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, yt_receive_link)],
             WAITING_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, yt_receive_name)],
         },
-        fallbacks=[CallbackQueryHandler(yt_cancel, pattern="^yt_cancel$")]
+        fallbacks=[CallbackQueryHandler(yt_cancel, pattern="^yt_cancel$")],
+        allow_reentry=True
     )
     bot.add_handler(yt_conv)
     
@@ -939,7 +943,8 @@ def setup_bot():
             WAITING_STORE_DESC: [MessageHandler(filters.TEXT & ~filters.COMMAND, store_receive_desc)],
             WAITING_STORE_LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, store_receive_link)],
         },
-        fallbacks=[CallbackQueryHandler(store_cancel, pattern="^store_cancel$")]
+        fallbacks=[CallbackQueryHandler(store_cancel, pattern="^store_cancel$")],
+        allow_reentry=True
     )
     bot.add_handler(store_conv)
     
@@ -949,7 +954,8 @@ def setup_bot():
         states={
             WAITING_KEYS_COUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, keys_receive_count)],
         },
-        fallbacks=[CallbackQueryHandler(keys_cancel, pattern="^keys_cancel$")]
+        fallbacks=[CallbackQueryHandler(keys_cancel, pattern="^keys_cancel$")],
+        allow_reentry=True
     )
     bot.add_handler(keys_conv)
     

@@ -226,23 +226,19 @@ async def show_main_menu(update_or_query, ctx):
     
     message = f"🤖 **PAPI DEXTER BOT**\n\n🌐 **Web:** {web_url}\n\n📤 **Sube archivos a tu web**\n📹 **Agrega videos de YouTube**\n\nSelecciona una opción:"
     
-    # Determinar si es un mensaje o un callback
     if hasattr(update_or_query, 'message'):
-        # Es un mensaje
         await update_or_query.message.reply_text(
             message,
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="Markdown"
         )
     elif hasattr(update_or_query, 'edit_message_text'):
-        # Es un callback query
         await update_or_query.edit_message_text(
             message,
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="Markdown"
         )
     else:
-        # Es un update directo
         await update_or_query.reply_text(
             message,
             reply_markup=InlineKeyboardMarkup(keyboard),
@@ -437,7 +433,6 @@ async def receive_file(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         
         size_mb = os.path.getsize(os.path.join(UPLOADS_DIR, final_name)) / (1024 * 1024)
         
-        # Mostrar mensaje de éxito
         await update.message.reply_text(
             f"✅ **ARCHIVO SUBIDO**\n\n"
             f"📁 **Nombre:** `{final_name}`\n"
@@ -447,7 +442,6 @@ async def receive_file(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
         )
         
-        # Volver al menú principal automáticamente
         ctx.user_data.clear()
         await asyncio.sleep(1)
         await show_main_menu(update, ctx)
@@ -491,17 +485,21 @@ async def menu_yt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def yt_add(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    
+    keyboard = [
+        [InlineKeyboardButton("🔙 Menú Principal", callback_data="back_main")]
+    ]
+    
     await query.edit_message_text(
         "📥 **Agregar Video**\n\n"
         "Formato:\n"
         "`/yt link_youtube nombre`\n\n"
         "Ejemplo:\n"
         "`/yt https://youtu.be/xxxxx video1`\n\n"
-        "🔙 Volverá al menú automáticamente.",
+        "📌 El thumbnail se descargará automáticamente.",
+        reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown"
     )
-    await asyncio.sleep(2)
-    await show_main_menu(query, ctx)
 
 async def yt_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -619,14 +617,19 @@ async def menu_store(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def store_add(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    
+    keyboard = [
+        [InlineKeyboardButton("🔙 Menú Principal", callback_data="back_main")]
+    ]
+    
     await query.edit_message_text(
         "📦 **Agregar Producto**\n\n"
         "`/addstore nombre | precio | desc | link`\n\n"
-        "🔙 Volverá al menú automáticamente.",
+        "Ejemplo:\n"
+        "`/addstore Skin XP | 10.99 | Skin exclusiva | https://link.com`",
+        reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown"
     )
-    await asyncio.sleep(2)
-    await show_main_menu(query, ctx)
 
 async def store_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -706,13 +709,19 @@ async def menu_keys(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def keys_gen(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    
+    keyboard = [
+        [InlineKeyboardButton("🔙 Menú Principal", callback_data="back_main")]
+    ]
+    
     await query.edit_message_text(
-        "🔑 `/genkey cantidad`\n\n"
-        "🔙 Volverá al menú automáticamente.",
+        "🔑 **Generar Keys**\n\n"
+        "`/genkey cantidad`\n\n"
+        "Ejemplo:\n"
+        "`/genkey 5`",
+        reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown"
     )
-    await asyncio.sleep(2)
-    await show_main_menu(query, ctx)
 
 async def keys_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query

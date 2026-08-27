@@ -111,7 +111,6 @@ def get_video_id(url):
 
 # ==================== FUNCIÓN PARA OBTENER THUMBNAIL ====================
 def get_thumbnail_url(video_id):
-    """Obtiene la URL del thumbnail de YouTube sin descargarlo"""
     if not video_id:
         return None
     
@@ -239,7 +238,6 @@ def is_admin(update):
 
 # ==================== MENÚ PRINCIPAL ====================
 async def show_main_menu(update_or_query, ctx):
-    """Función para mostrar el menú principal desde cualquier lugar"""
     web_url = PUBLIC_URL or "https://dexter-modz-sk.onrender.com"
     
     keyboard = [
@@ -507,7 +505,7 @@ async def yt_add_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "`https://youtu.be/xxxxx`\n"
         "`https://www.youtube.com/watch?v=xxxxx`\n"
         "`https://youtube.com/shorts/xxxxx`\n\n"
-        "📌 **PASO 2:** Luego envía el **link de descarga**\n\n"
+        "📌 **PASO 2:** Luego envía el **link de descarga** (MediaFire, Mega, etc.)\n\n"
         "🔴 Presiona 'Cancelar' para salir.",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown"
@@ -531,11 +529,9 @@ async def yt_receive_link(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
         return WAITING_YT_LINK
     
-    # GUARDAR EN CONTEXTO
     ctx.user_data['yt_url'] = url
     ctx.user_data['yt_id'] = video_id
     
-    # Obtener thumbnail sin descargar
     thumb_url = get_thumbnail_url(video_id)
     ctx.user_data['thumb_url'] = thumb_url
     
@@ -544,11 +540,6 @@ async def yt_receive_link(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"✅ **Link de YouTube guardado**\n\n"
         f"📌 **PASO 2:** Envía el **link de descarga**\n\n"
-        f"Puede ser de:\n"
-        f"• MediaFire\n"
-        f"• Mega\n"
-        f"• Google Drive\n"
-        f"• Cualquier otro servicio\n\n"
         f"Ejemplo:\n"
         f"`https://www.mediafire.com/file/xxxxx`",
         reply_markup=InlineKeyboardMarkup(keyboard),
@@ -563,7 +554,6 @@ async def yt_receive_download(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     
     download_link = update.message.text.strip()
     
-    # Validar que sea un link válido
     if not download_link.startswith(('http://', 'https://')):
         await update.message.reply_text(
             "❌ **Link inválido**\n\n"
@@ -578,25 +568,17 @@ async def yt_receive_download(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     video_id = ctx.user_data.get('yt_id', '')
     thumb_url = ctx.user_data.get('thumb_url', '')
     
-    # GUARDAR EN POSTS CON EL LINK DE DESCARGA
+    # GUARDAR EN POSTS
     posts = load_posts()
     
-    # Verificar si ya existe el video (evitar duplicados)
-    exists = False
-    for p in posts:
-        if p.get('youtube') == yt_url and p.get('download') == download_link:
-            exists = True
-            break
-    
-    if not exists:
-        posts.append({
-            "youtube": yt_url,
-            "video_id": video_id,
-            "thumbnail": thumb_url,
-            "download": download_link,
-            "created": time.time()
-        })
-        save_posts(posts)
+    posts.append({
+        "youtube": yt_url,
+        "video_id": video_id,
+        "thumbnail": thumb_url,
+        "download": download_link,
+        "created": time.time()
+    })
+    save_posts(posts)
     
     keyboard = [
         [InlineKeyboardButton("📹 Agregar otro", callback_data="yt_add_start")],
@@ -609,11 +591,26 @@ async def yt_receive_download(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 📹 **YouTube:** {yt_url}
 📥 **Descarga:** {download_link}"""
     
-    await update.message.reply_text(
-        message,
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="Markdown"
-    )
+    if thumb_url:
+        try:
+            await update.message.reply_photo(
+                photo=thumb_url,
+                caption=message,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode="Markdown"
+            )
+        except:
+            await update.message.reply_text(
+                message,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode="Markdown"
+            )
+    else:
+        await update.message.reply_text(
+            message,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown"
+        )
     
     ctx.user_data.clear()
     return ConversationHandler.END
@@ -643,9 +640,7 @@ async def yt_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         youtube = p.get('youtube', 'sin link')
         download = p.get('download', 'sin link')
         
-        message = f"📹 **Video {i+1}**\n\n"
-        message += f"📹 **YouTube:** {youtube}\n"
-        message += f"📥 **Descarga:** {download}\n"
+        message = f"📹 **Video {i+1}**\n\n📹 **YouTube:** {youtube}\n📥 **Descarga:** {download}"
         
         if thumb:
             try:

@@ -12,7 +12,7 @@ import hashlib
 
 from datetime import timedelta
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -21,6 +21,7 @@ from telegram.ext import (
     filters,
     ContextTypes
 )
+from telegram import InputFile  # 🔥 IMPORTANTE: InputFile va aquí
 
 import UnityPy
 
@@ -44,7 +45,7 @@ PUBLIC_URL = os.environ.get("PUBLIC_URL")
 
 ADMIN_ID = 6841201622
 
-API_URL = PUBLIC_URL.rstrip("/") + "/bot/post" if PUBLIC_URL else "http://localhost:5000/bot/post"
+API_URL = PUBLIC_URL.rstrip("/") + "/bot/post" if PUBLIC_URL else "http://localhost:10000/bot/post"
 
 START_TIME = time.time()
 
@@ -89,7 +90,7 @@ def get_video_id(url):
 # ==================== SEGURIDAD WEB ====================
 @app.before_request
 def proteger():
-    libres = ["/", "/bot/post", "/webhook", "/logout", "/gato", "/downloader", "/static"]
+    libres = ["/", "/bot/post", "/webhook", "/logout", "/gato", "/downloader"]
     if request.path.startswith("/static"):
         return
     if request.path in libres:
@@ -109,7 +110,7 @@ def login():
         
         if user == USUARIO and password == PASSWORD:
             if key == MASTER_KEY or key in keys:
-                if key in keys:
+                if key in keys and key != MASTER_KEY:
                     keys.remove(key)
                     save_keys(keys)
                 session.permanent = True
@@ -618,6 +619,4 @@ async def genkey_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         
         await update.message.reply_document(InputFile(file, filename="keys.txt"))
     except ValueError:
-        await update.message.reply_text("❌ Uso: /genkey cantidad")
-    except Exception as e:
-        await
+        await update.message.reply_text

@@ -65,28 +65,46 @@ WAITING_KEYS_COUNT = 20
 
 # ==================== FUNCIONES JSON ====================
 def load_json(file):
-    if not os.path.exists(file): return []
+    if not os.path.exists(file):
+        return []
     try:
-        with open(file, "r", encoding="utf-8") as f: return json.load(f)
-    except: return []
+        with open(file, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return []
 
 def save_json(file, data):
-    with open(file, "w", encoding="utf-8") as f: json.dump(data, f, indent=4)
+    with open(file, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4)
 
-def load_posts(): return load_json(DB_FILE)
-def save_posts(d): save_json(DB_FILE, d)
-def load_keys(): return load_json(KEYS_FILE)
-def save_keys(d): save_json(KEYS_FILE, d)
-def load_store(): return load_json(STORE_FILE)
-def save_store(d): save_json(STORE_FILE, d)
+def load_posts():
+    return load_json(DB_FILE)
+
+def save_posts(d):
+    save_json(DB_FILE, d)
+
+def load_keys():
+    return load_json(KEYS_FILE)
+
+def save_keys(d):
+    save_json(KEYS_FILE, d)
+
+def load_store():
+    return load_json(STORE_FILE)
+
+def save_store(d):
+    save_json(STORE_FILE, d)
 
 def gen_key():
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=16))
 
 def get_video_id(url):
-    if not url: return None
-    if "v=" in url: return url.split("v=")[1].split("&")[0]
-    if "youtu.be/" in url: return url.split("youtu.be/")[1].split("?")[0]
+    if not url:
+        return None
+    if "v=" in url:
+        return url.split("v=")[1].split("&")[0]
+    if "youtu.be/" in url:
+        return url.split("youtu.be/")[1].split("?")[0]
     if "youtube.com/shorts/" in url:
         return url.split("youtube.com/shorts/")[1].split("?")[0]
     return None
@@ -169,15 +187,18 @@ def login():
         if user == USUARIO and password == PASSWORD:
             if key == MASTER_KEY or key in keys:
                 if key in keys and key != MASTER_KEY:
-                    keys.remove(key); save_keys(keys)
-                session.permanent = True; session["login"] = True
+                    keys.remove(key)
+                    save_keys(keys)
+                session.permanent = True
+                session["login"] = True
                 return redirect("/panel")
         return render_template("index.html", error="❌ Login incorrecto")
     return render_template("index.html")
 
 @app.route("/logout")
 def logout():
-    session.clear(); return redirect("/")
+    session.clear()
+    return redirect("/")
 
 @app.route("/panel")
 def panel():
@@ -203,15 +224,18 @@ def downloader():
 def bot_post():
     try:
         data = request.json
-        if not data: return jsonify({"error": "No data"}), 400
+        if not data:
+            return jsonify({"error": "No data"}), 400
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 # ==================== BOT ====================
 def is_admin(update):
-    try: return update.effective_user.id == ADMIN_ID
-    except: return False
+    try:
+        return update.effective_user.id == ADMIN_ID
+    except:
+        return False
 
 # ==================== MENÚ PRINCIPAL ====================
 async def show_main_menu(update_or_query, ctx):
@@ -467,7 +491,7 @@ async def upload_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await show_main_menu(query, ctx)
     return ConversationHandler.END
 
-# ==================== AGREGAR VIDEO (SOLO LINK YT + LINK DESCARGA) ====================
+# ==================== AGREGAR VIDEO (LINK YT + LINK DESCARGA) ====================
 async def yt_add_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -507,6 +531,7 @@ async def yt_receive_link(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
         return WAITING_YT_LINK
     
+    # GUARDAR EN CONTEXTO
     ctx.user_data['yt_url'] = url
     ctx.user_data['yt_id'] = video_id
     
@@ -548,18 +573,30 @@ async def yt_receive_download(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
         return WAITING_YT_DOWNLOAD
     
-    ctx.user_data['download_link'] = download_link
+    # OBTENER DATOS DEL CONTEXTO
+    yt_url = ctx.user_data.get('yt_url', '')
+    video_id = ctx.user_data.get('yt_id', '')
+    thumb_url = ctx.user_data.get('thumb_url', '')
     
-    # Guardar en posts
+    # GUARDAR EN POSTS CON EL LINK DE DESCARGA
     posts = load_posts()
-    posts.append({
-        "youtube": ctx.user_data.get('yt_url'),
-        "video_id": ctx.user_data.get('yt_id'),
-        "thumbnail": ctx.user_data.get('thumb_url'),
-        "download": download_link,
-        "created": time.time()
-    })
-    save_posts(posts)
+    
+    # Verificar si ya existe el video (evitar duplicados)
+    exists = False
+    for p in posts:
+        if p.get('youtube') == yt_url and p.get('download') == download_link:
+            exists = True
+            break
+    
+    if not exists:
+        posts.append({
+            "youtube": yt_url,
+            "video_id": video_id,
+            "thumbnail": thumb_url,
+            "download": download_link,
+            "created": time.time()
+        })
+        save_posts(posts)
     
     keyboard = [
         [InlineKeyboardButton("📹 Agregar otro", callback_data="yt_add_start")],
@@ -569,7 +606,7 @@ async def yt_receive_download(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     
     message = f"""✅ **VIDEO AGREGADO**
 
-📹 **YouTube:** {ctx.user_data.get('yt_url')}
+📹 **YouTube:** {yt_url}
 📥 **Descarga:** {download_link}"""
     
     await update.message.reply_text(
@@ -605,7 +642,6 @@ async def yt_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         thumb = p.get('thumbnail')
         youtube = p.get('youtube', 'sin link')
         download = p.get('download', 'sin link')
-        video_id = p.get('video_id', '')
         
         message = f"📹 **Video {i+1}**\n\n"
         message += f"📹 **YouTube:** {youtube}\n"
@@ -1185,30 +1221,11 @@ async def back_main(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     await show_main_menu(query, ctx)
 
-# ==================== COMANDOS ====================
-async def addstore_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update): return
-    await update.message.reply_text(
-        "📦 **Agregar Producto**\n\n"
-        "Usa el botón **➕ Agregar Producto** en el menú Tienda.",
-        parse_mode="Markdown"
-    )
-
-async def genkey_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update): return
-    await update.message.reply_text(
-        "🔑 **Generar Keys**\n\n"
-        "Usa el botón **🔑 Generar Keys** en el menú Keys.",
-        parse_mode="Markdown"
-    )
-
 # ==================== CONFIGURACIÓN DEL BOT ====================
 def setup_bot():
     bot = ApplicationBuilder().token(TOKEN).build()
     
     bot.add_handler(CommandHandler("start", start_cmd))
-    bot.add_handler(CommandHandler("addstore", addstore_cmd))
-    bot.add_handler(CommandHandler("genkey", genkey_cmd))
     
     # ===== SUBIR ARCHIVO CON OPCIÓN DE BORRAR =====
     upload_conv = ConversationHandler(

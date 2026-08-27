@@ -91,11 +91,11 @@ def get_video_id(url):
         return url.split("youtube.com/shorts/")[1].split("?")[0]
     return None
 
-# ==================== FUNCIÓN PARA OBTENER THUMBNAIL (CON TIMEOUT) ====================
-def download_thumbnail(video_id):
-    """Descarga el thumbnail de YouTube con timeout para no quedarse pegado"""
+# ==================== FUNCIÓN PARA OBTENER THUMBNAIL ====================
+def get_thumbnail_url(video_id):
+    """Obtiene la URL del thumbnail de YouTube sin descargarlo"""
     if not video_id:
-        return None, None
+        return None
     
     thumb_urls = [
         f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg",
@@ -105,22 +105,13 @@ def download_thumbnail(video_id):
     
     for url in thumb_urls:
         try:
-            # 🔥 TIMEOUT DE 5 SEGUNDOS PARA NO QUEDARSE PEGADO
-            response = requests.get(url, timeout=5)
+            response = requests.head(url, timeout=3)
             if response.status_code == 200:
-                thumb_filename = f"thumb_{video_id}_{int(time.time())}.jpg"
-                thumb_path = os.path.join(UPLOADS_DIR, thumb_filename)
-                with open(thumb_path, 'wb') as f:
-                    f.write(response.content)
-                return thumb_filename, f"/uploads/{thumb_filename}"
-        except requests.Timeout:
-            print(f"⏰ Timeout descargando thumbnail: {url}")
-            continue
-        except Exception as e:
-            print(f"❌ Error descargando thumbnail: {e}")
+                return url
+        except:
             continue
     
-    return None, None
+    return None
 
 # ==================== FUNCIÓN DE SUBIDA ====================
 def upload_file(filepath, filename=None):
@@ -476,7 +467,7 @@ async def upload_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await show_main_menu(query, ctx)
     return ConversationHandler.END
 
-# ==================== AGREGAR VIDEO (LINK YT + LINK DESCARGA) ====================
+# ==================== AGREGAR VIDEO (SOLO LINK YT + LINK DESCARGA) ====================
 async def yt_add_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -492,7 +483,7 @@ async def yt_add_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "`https://youtu.be/xxxxx`\n"
         "`https://www.youtube.com/watch?v=xxxxx`\n"
         "`https://youtube.com/shorts/xxxxx`\n\n"
-        "🖼️ **El thumbnail se descargará automáticamente**\n\n"
+        "📌 **PASO 2:** Luego envía el **link de descarga**\n\n"
         "🔴 Presiona 'Cancelar' para salir.",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown"
@@ -519,45 +510,25 @@ async def yt_receive_link(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data['yt_url'] = url
     ctx.user_data['yt_id'] = video_id
     
-    # Descargar thumbnail con timeout
-    await update.message.reply_text(f"🖼️ Descargando thumbnail para `{video_id}`...", parse_mode="Markdown")
-    
-    # 🔥 EJECUTAR EN UN THREAD SEPARADO PARA NO BLOQUEAR
-    loop = asyncio.get_event_loop()
-    thumb_filename, thumb_url = await loop.run_in_executor(None, download_thumbnail, video_id)
-    
-    ctx.user_data['thumb_filename'] = thumb_filename
+    # Obtener thumbnail sin descargar
+    thumb_url = get_thumbnail_url(video_id)
     ctx.user_data['thumb_url'] = thumb_url
     
     keyboard = [[InlineKeyboardButton("❌ Cancelar", callback_data="yt_cancel")]]
     
-    if thumb_url:
-        await update.message.reply_photo(
-            photo=thumb_url,
-            caption=f"✅ **Thumbnail descargado**\n\n"
-                    f"📌 **PASO 2:** Envía el **link de descarga**\n\n"
-                    f"Puede ser de:\n"
-                    f"• MediaFire\n"
-                    f"• Mega\n"
-                    f"• Google Drive\n"
-                    f"• Cualquier otro servicio\n\n"
-                    f"Ejemplo:\n"
-                    f"`https://www.mediafire.com/file/xxxxx`",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode="Markdown"
-        )
-    else:
-        await update.message.reply_text(
-            f"⚠️ No se pudo descargar el thumbnail (timeout o no disponible)\n\n"
-            f"📌 **PASO 2:** Envía el **link de descarga**\n\n"
-            f"Puede ser de:\n"
-            f"• MediaFire\n"
-            f"• Mega\n"
-            f"• Google Drive\n"
-            f"• Cualquier otro servicio",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode="Markdown"
-        )
+    await update.message.reply_text(
+        f"✅ **Link de YouTube guardado**\n\n"
+        f"📌 **PASO 2:** Envía el **link de descarga**\n\n"
+        f"Puede ser de:\n"
+        f"• MediaFire\n"
+        f"• Mega\n"
+        f"• Google Drive\n"
+        f"• Cualquier otro servicio\n\n"
+        f"Ejemplo:\n"
+        f"`https://www.mediafire.com/file/xxxxx`",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
     
     return WAITING_YT_DOWNLOAD
 
@@ -599,22 +570,13 @@ async def yt_receive_download(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     message = f"""✅ **VIDEO AGREGADO**
 
 📹 **YouTube:** {ctx.user_data.get('yt_url')}
-📥 **Descarga:** {download_link}
-🖼️ **Thumbnail:** {'✅ Descargado' if ctx.user_data.get('thumb_url') else '❌ No disponible'}"""
+📥 **Descarga:** {download_link}"""
     
-    if ctx.user_data.get('thumb_url'):
-        await update.message.reply_photo(
-            photo=ctx.user_data.get('thumb_url'),
-            caption=message,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode="Markdown"
-        )
-    else:
-        await update.message.reply_text(
-            message,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode="Markdown"
-        )
+    await update.message.reply_text(
+        message,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
     
     ctx.user_data.clear()
     return ConversationHandler.END
@@ -648,17 +610,14 @@ async def yt_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         message = f"📹 **Video {i+1}**\n\n"
         message += f"📹 **YouTube:** {youtube}\n"
         message += f"📥 **Descarga:** {download}\n"
-        if video_id:
-            message += f"🆔 **ID:** `{video_id}`\n"
         
-        if thumb and os.path.exists(os.path.join('.', thumb.lstrip('/'))):
+        if thumb:
             try:
-                with open(os.path.join('.', thumb.lstrip('/')), 'rb') as f:
-                    await query.message.reply_photo(
-                        photo=InputFile(f),
-                        caption=message,
-                        parse_mode="Markdown"
-                    )
+                await query.message.reply_photo(
+                    photo=thumb,
+                    caption=message,
+                    parse_mode="Markdown"
+                )
             except:
                 await query.message.reply_text(message, parse_mode="Markdown")
         else:
@@ -1208,7 +1167,7 @@ async def menu_info(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 📌 **Funciones:**
 • 📤 Subir archivos (con opción de borrar)
-• 📹 Gestión de videos (con thumbnail + link descarga)
+• 📹 Gestión de videos (thumbnail automático + link descarga)
 • 🛒 Tienda
 • 🔑 Keys (hasta 5000)
 

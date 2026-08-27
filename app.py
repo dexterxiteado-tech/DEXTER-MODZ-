@@ -91,8 +91,9 @@ def get_video_id(url):
         return url.split("youtube.com/shorts/")[1].split("?")[0]
     return None
 
-# ==================== FUNCIÓN PARA OBTENER THUMBNAIL ====================
+# ==================== FUNCIÓN PARA OBTENER THUMBNAIL (CON TIMEOUT) ====================
 def download_thumbnail(video_id):
+    """Descarga el thumbnail de YouTube con timeout para no quedarse pegado"""
     if not video_id:
         return None, None
     
@@ -104,14 +105,19 @@ def download_thumbnail(video_id):
     
     for url in thumb_urls:
         try:
-            response = requests.get(url, timeout=10)
+            # 🔥 TIMEOUT DE 5 SEGUNDOS PARA NO QUEDARSE PEGADO
+            response = requests.get(url, timeout=5)
             if response.status_code == 200:
                 thumb_filename = f"thumb_{video_id}_{int(time.time())}.jpg"
                 thumb_path = os.path.join(UPLOADS_DIR, thumb_filename)
                 with open(thumb_path, 'wb') as f:
                     f.write(response.content)
                 return thumb_filename, f"/uploads/{thumb_filename}"
-        except:
+        except requests.Timeout:
+            print(f"⏰ Timeout descargando thumbnail: {url}")
+            continue
+        except Exception as e:
+            print(f"❌ Error descargando thumbnail: {e}")
             continue
     
     return None, None
@@ -513,10 +519,13 @@ async def yt_receive_link(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data['yt_url'] = url
     ctx.user_data['yt_id'] = video_id
     
-    # Descargar thumbnail
+    # Descargar thumbnail con timeout
     await update.message.reply_text(f"🖼️ Descargando thumbnail para `{video_id}`...", parse_mode="Markdown")
     
-    thumb_filename, thumb_url = download_thumbnail(video_id)
+    # 🔥 EJECUTAR EN UN THREAD SEPARADO PARA NO BLOQUEAR
+    loop = asyncio.get_event_loop()
+    thumb_filename, thumb_url = await loop.run_in_executor(None, download_thumbnail, video_id)
+    
     ctx.user_data['thumb_filename'] = thumb_filename
     ctx.user_data['thumb_url'] = thumb_url
     
@@ -539,7 +548,7 @@ async def yt_receive_link(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
     else:
         await update.message.reply_text(
-            f"⚠️ No se pudo descargar el thumbnail\n\n"
+            f"⚠️ No se pudo descargar el thumbnail (timeout o no disponible)\n\n"
             f"📌 **PASO 2:** Envía el **link de descarga**\n\n"
             f"Puede ser de:\n"
             f"• MediaFire\n"

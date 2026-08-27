@@ -83,7 +83,6 @@ def get_video_id(url):
 
 # ==================== FUNCIÓN PARA OBTENER THUMBNAIL ====================
 def download_thumbnail(video_id):
-    """Descarga el thumbnail de YouTube y lo guarda en uploads/"""
     if not video_id:
         return None, None
     
@@ -125,6 +124,16 @@ def upload_file(filepath, filename=None):
     else:
         link = f"http://localhost:5000/uploads/{filename}"
     return link, filename
+
+# ==================== FUNCIÓN PARA LISTAR ARCHIVOS ====================
+def get_file_list(folder):
+    files = []
+    if os.path.exists(folder):
+        for f in os.listdir(folder):
+            path = os.path.join(folder, f)
+            if os.path.isfile(path):
+                files.append(f)
+    return sorted(files)
 
 # ==================== SEGURIDAD WEB ====================
 @app.before_request
@@ -217,23 +226,144 @@ async def start_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(
         "🤖 **PAPI DEXTER BOT**\n\n"
-        "📤 **Sube archivos**\n"
+        "📤 **Sube archivos a tu web**\n"
         "📹 **Agrega videos de YouTube**\n\n"
         "Selecciona una opción:",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown"
     )
 
-# ==================== SUBIR ARCHIVO ====================
+# ==================== SUBIR ARCHIVO CON OPCIÓN DE BORRAR ====================
 async def upload_file_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     ctx.user_data.clear()
     
+    files = get_file_list(UPLOADS_DIR)
+    
+    keyboard = []
+    
+    if files:
+        for i, f in enumerate(files[:10]):
+            path = os.path.join(UPLOADS_DIR, f)
+            size_kb = os.path.getsize(path) / 1024
+            keyboard.append([
+                InlineKeyboardButton(
+                    f"🗑️ {i+1}. {f[:20]} ({size_kb:.1f}KB)",
+                    callback_data=f"del_before_{i}"
+                )
+            ])
+        
+        total_size = sum(os.path.getsize(os.path.join(UPLOADS_DIR, f)) for f in files)
+        total_mb = total_size / (1024 * 1024)
+        keyboard.append([
+            InlineKeyboardButton(
+                f"🗑️ Borrar Todos ({len(files)} archivos, {total_mb:.1f}MB)",
+                callback_data="del_before_all"
+            )
+        ])
+        
+        keyboard.append([InlineKeyboardButton("─" * 30, callback_data="none")])
+    
+    keyboard.append([
+        InlineKeyboardButton("📤 Subir Archivo", callback_data="upload_start")
+    ])
+    keyboard.append([
+        InlineKeyboardButton("❌ Cancelar", callback_data="upload_cancel")
+    ])
+    
+    message = "📤 **SUBIR ARCHIVO**\n\n"
+    
+    if files:
+        message += f"📁 **Archivos existentes:** {len(files)}\n"
+        message += f"📦 **Espacio usado:** {total_mb:.2f} MB\n"
+        message += f"💾 **Límite Render:** ~1 GB\n\n"
+        message += "🗑️ **Borra archivos viejos** antes de subir nuevos:\n\n"
+    else:
+        message += "📌 **No hay archivos guardados.**\n\n"
+        message += "📌 Envía el archivo que quieras subir\n\n"
+        message += "Puedes enviar:\n"
+        message += "• 📁 Archivo cualquiera\n"
+        message += "• 📷 Imagen\n"
+        message += "• 🎬 Video\n"
+    
+    await query.edit_message_text(
+        message,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
+    
+    return UPLOAD_WAITING_FILE
+
+# ==================== BORRAR ARCHIVO ANTES DE SUBIR ====================
+async def delete_before_upload(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    try:
+        idx = int(query.data.split("_")[2])
+        files = get_file_list(UPLOADS_DIR)
+        
+        if 0 <= idx < len(files):
+            filename = files[idx]
+            filepath = os.path.join(UPLOADS_DIR, filename)
+            
+            if os.path.exists(filepath):
+                os.remove(filepath)
+                await query.answer(f"✅ Eliminado: {filename}", show_alert=True)
+        
+        await upload_file_start(update, ctx)
+        
+    except Exception as e:
+        await query.edit_message_text(f"❌ Error: {e}")
+
+async def delete_before_all(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    keyboard = [
+        [InlineKeyboardButton("✅ SI, borrar todo", callback_data="del_all_before_confirm")],
+        [InlineKeyboardButton("❌ NO, cancelar", callback_data="upload_file")]
+    ]
+    
+    files = get_file_list(UPLOADS_DIR)
+    total_size = sum(os.path.getsize(os.path.join(UPLOADS_DIR, f)) for f in files)
+    total_mb = total_size / (1024 * 1024)
+    
+    await query.edit_message_text(
+        f"⚠️ **¿BORRAR TODOS LOS ARCHIVOS?**\n\n"
+        f"📁 **Archivos:** {len(files)}\n"
+        f"📦 **Tamaño:** {total_mb:.2f} MB\n\n"
+        f"Esta acción **no se puede deshacer**.",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
+
+async def delete_all_before_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    files = get_file_list(UPLOADS_DIR)
+    deleted = 0
+    
+    for f in files:
+        filepath = os.path.join(UPLOADS_DIR, f)
+        if os.path.exists(filepath):
+            os.remove(filepath)
+            deleted += 1
+    
+    await query.answer(f"✅ {deleted} archivos eliminados", show_alert=True)
+    await upload_file_start(update, ctx)
+
+# ==================== INICIAR SUBIDA ====================
+async def upload_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
     keyboard = [[InlineKeyboardButton("❌ Cancelar", callback_data="upload_cancel")]]
     
     await query.edit_message_text(
-        "📤 **SUBIR ARCHIVO**\n\n"
+        "📤 **ENVÍA EL ARCHIVO**\n\n"
         "📌 Envía el archivo que quieras subir\n\n"
         "Puedes enviar:\n"
         "• 📁 Archivo cualquiera\n"
@@ -355,7 +485,6 @@ async def yt_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
     
     for i, p in enumerate(posts):
-        # Mostrar cada video con su thumbnail
         thumb = p.get('thumbnail')
         name = p.get('file', 'sin nombre')
         url = p.get('youtube', 'sin link')
@@ -556,6 +685,10 @@ async def menu_stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     posts = len(load_posts())
     store = len(load_store())
     keys = len(load_keys())
+    files = get_file_list(UPLOADS_DIR)
+    total_size = sum(os.path.getsize(os.path.join(UPLOADS_DIR, f)) for f in files)
+    total_mb = total_size / (1024 * 1024)
+    
     uptime_sec = int(time.time() - START_TIME)
     hours = uptime_sec // 3600
     minutes = (uptime_sec % 3600) // 60
@@ -565,10 +698,20 @@ async def menu_stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 📹 Videos: {posts}
 🛒 Productos: {store}
 🔑 Keys: {keys}
+
+📁 **Archivos subidos:** {len(files)}
+📦 **Espacio usado:** {total_mb:.2f} MB
+💾 **Límite Render:** ~1 GB
+
 ⏱️ Uptime: {hours}h {minutes}m"""
     
     keyboard = [[InlineKeyboardButton("🔙 Volver", callback_data="back_main")]]
-    await query.edit_message_text(txt, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+    
+    await query.edit_message_text(
+        txt,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
 
 # ==================== INFO ====================
 async def menu_info(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -580,7 +723,7 @@ async def menu_info(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 🤖 Bot de gestión de archivos
 
 📌 **Funciones:**
-• 📤 Subir archivos
+• 📤 Subir archivos (con opción de borrar)
 • 📹 Gestión de videos (con thumbnail)
 • 🛒 Tienda
 • 🔑 Keys
@@ -675,7 +818,7 @@ def setup_bot():
     bot.add_handler(CommandHandler("addstore", addstore_cmd))
     bot.add_handler(CommandHandler("genkey", genkey_cmd))
     
-    # Subir Archivo
+    # ===== SUBIR ARCHIVO CON OPCIÓN DE BORRAR =====
     upload_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(upload_file_start, pattern="^upload_file$")],
         states={
@@ -690,7 +833,13 @@ def setup_bot():
     )
     bot.add_handler(upload_conv)
     
-    # Callbacks
+    # ===== BORRAR ANTES DE SUBIR =====
+    bot.add_handler(CallbackQueryHandler(delete_before_upload, pattern="^del_before_"))
+    bot.add_handler(CallbackQueryHandler(delete_before_all, pattern="^del_before_all$"))
+    bot.add_handler(CallbackQueryHandler(delete_all_before_confirm, pattern="^del_all_before_confirm$"))
+    bot.add_handler(CallbackQueryHandler(upload_start, pattern="^upload_start$"))
+    
+    # ===== CALLBACKS =====
     bot.add_handler(CallbackQueryHandler(menu_yt, pattern="^menu_yt$"))
     bot.add_handler(CallbackQueryHandler(menu_store, pattern="^menu_store$"))
     bot.add_handler(CallbackQueryHandler(menu_keys, pattern="^menu_keys$"))

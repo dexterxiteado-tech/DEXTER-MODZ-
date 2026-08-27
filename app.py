@@ -209,10 +209,6 @@ def gato():
 def downloader():
     return render_template("downloader.html")
 
-@app.route("/modificador")
-def modificador():
-    return render_template("modificador.html")
-
 # ================= BOT POST =================
 @app.route("/bot/post", methods=["POST"])
 def bot_post():
@@ -258,7 +254,6 @@ async def start_cmd(update: Update, ctx):
 /addstore /liststore /delstore
 /stats /ping /uptime
 /genkey /delkeysall
-/transform
 """)
 
 # ================= POSTS =================
@@ -341,133 +336,6 @@ async def clear(update, ctx):
         "Todo eliminado"
     )
 
-# ================= TRANSFORM =================
-async def transform(update, ctx):
-
-    if not is_admin(update):
-        return
-
-    # 🔥 Debe responder a archivo
-    if not update.message.reply_to_message:
-
-        await update.message.reply_text(
-            "❌ Responde al archivo Unity."
-        )
-
-        return
-
-    doc = update.message.reply_to_message.document
-
-    if not doc:
-
-        await update.message.reply_text(
-            "❌ Archivo inválido."
-        )
-
-        return
-
-    try:
-
-        await update.message.reply_text(
-            "📦 Descargando bundle..."
-        )
-
-        tg_file = await doc.get_file()
-
-        input_path = os.path.join(
-            TEMP_DIR,
-            f"input_{doc.file_name}"
-        )
-
-        output_path = os.path.join(
-            TEMP_DIR,
-            f"mod_{doc.file_name}"
-        )
-
-        # 🔥 descargar archivo
-        await tg_file.download_to_drive(
-            input_path
-        )
-
-        await update.message.reply_text(
-            "🔍 Leyendo bundle..."
-        )
-
-        # 🔥 abrir bundle
-        env = UnityPy.load(input_path)
-
-        modificados = 0
-
-        # 🔥 recorrer objetos
-        for obj in env.objects:
-
-            try:
-
-                # 🔥 SOLO Transform
-                if obj.type.name != "Transform":
-                    continue
-
-                data = obj.read()
-
-                # 🔥 obtener valores actuales
-                old_x = data.m_LocalScale.x
-                old_y = data.m_LocalScale.y
-                old_z = data.m_LocalScale.z
-
-                # 🔥 modificar escala
-                data.m_LocalScale.x = old_x * 0.8
-                data.m_LocalScale.y = old_y * 0.8
-                data.m_LocalScale.z = old_z * 0.8
-
-                # 🔥 guardar typetree
-                obj.save_typetree(data)
-
-                modificados += 1
-
-                print(
-                    f"[Transform] "
-                    f"{old_x}, {old_y}, {old_z}"
-                    f" -> "
-                    f"{data.m_LocalScale.x}, "
-                    f"{data.m_LocalScale.y}, "
-                    f"{data.m_LocalScale.z}"
-                )
-
-            except Exception as e:
-
-                print(
-                    f"Transform Error: {e}"
-                )
-
-        await update.message.reply_text(
-            f"🛠 Transform modificados: {modificados}"
-        )
-
-        # 🔥 GUARDAR BUNDLE REAL
-        with open(output_path, "wb") as f:
-            f.write(env.save())
-
-        # 🔥 enviar archivo
-        await update.message.reply_document(
-            document=open(output_path, "rb"),
-            filename=f"mod_{doc.file_name}",
-            caption="✅ Bundle transformado"
-        )
-
-        # 🔥 limpiar temporales
-        try:
-
-            os.remove(input_path)
-            os.remove(output_path)
-
-        except:
-            pass
-
-    except Exception as e:
-
-        await update.message.reply_text(
-            f"❌ Error:\n{str(e)}"
-        )
 
 # ================= STORE =================
 async def addstore(update, ctx):
@@ -675,11 +543,6 @@ bot.add_handler(
 bot.add_handler(
     CommandHandler("clear", clear)
 )
-
-bot.add_handler(
-    CommandHandler("transform", transform)
-)
-
 bot.add_handler(
     CommandHandler("addstore", addstore)
 )

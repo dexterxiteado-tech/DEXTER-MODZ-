@@ -153,6 +153,7 @@ def gato():
 def downloader():
     return render_template("downloader.html")
 
+# ==================== ENDPOINT PARA EL BOT (SOLO REGISTRA) ====================
 @app.route("/bot/post", methods=["POST"])
 def bot_post():
     try:
@@ -160,17 +161,8 @@ def bot_post():
         if not data:
             return jsonify({"error": "No data"}), 400
         
-        posts = load_posts()
-        vid = get_video_id(data.get("youtube"))
-        thumb = f"https://img.youtube.com/vi/{vid}/0.jpg" if vid else None
-        
-        posts.append({
-            "youtube": data.get("youtube"),
-            "file": data.get("file"),
-            "thumbnail": thumb,
-            "created": time.time()
-        })
-        save_posts(posts)
+        # ✅ SOLO REGISTRAMOS, NO GUARDAMOS 2 VECES
+        # El guardado ya lo hace la conversación
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -296,7 +288,7 @@ async def yt_receive_name(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Error: No hay link guardado. Vuelve a empezar.")
         return
     
-    # Guardar en la base de datos
+    # ✅ GUARDAR SOLO UNA VEZ AQUÍ
     posts = load_posts()
     vid = get_video_id(link)
     thumb = f"https://img.youtube.com/vi/{vid}/0.jpg" if vid else None
@@ -309,7 +301,7 @@ async def yt_receive_name(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     })
     save_posts(posts)
     
-    # Enviar notificación al bot (web)
+    # ✅ SOLO NOTIFICAR AL WEBHOOK (SIN GUARDAR DE NUEVO)
     try:
         async with aiohttp.ClientSession() as s:
             await s.post(API_URL, json={"youtube": link, "file": name})
@@ -903,7 +895,6 @@ async def foto_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         
         data = load_store()
         if data:
-            # Buscar el último producto sin imagen
             for i in range(len(data) - 1, -1, -1):
                 if not data[i].get("imagen"):
                     data[i]["imagen"] = "/" + path
@@ -970,19 +961,19 @@ def setup_bot():
     bot.add_handler(CallbackQueryHandler(menu_info, pattern="^menu_info$"))
     bot.add_handler(CallbackQueryHandler(back_main, pattern="^back_main$"))
     
-    # Callbacks - YouTube (listar, eliminar, limpiar)
+    # Callbacks - YouTube
     bot.add_handler(CallbackQueryHandler(yt_list, pattern="^yt_list$"))
     bot.add_handler(CallbackQueryHandler(yt_delete, pattern="^yt_delete$"))
     bot.add_handler(CallbackQueryHandler(yt_clear, pattern="^yt_clear$"))
     bot.add_handler(CallbackQueryHandler(yt_delete_confirm, pattern="^del_yt_"))
     bot.add_handler(CallbackQueryHandler(yt_clear_confirm, pattern="^yt_clear_confirm$"))
     
-    # Callbacks - Store (listar, eliminar)
+    # Callbacks - Store
     bot.add_handler(CallbackQueryHandler(store_list, pattern="^store_list$"))
     bot.add_handler(CallbackQueryHandler(store_delete, pattern="^store_delete$"))
     bot.add_handler(CallbackQueryHandler(store_delete_confirm, pattern="^del_store_"))
     
-    # Callbacks - Keys (listar, eliminar)
+    # Callbacks - Keys
     bot.add_handler(CallbackQueryHandler(keys_list, pattern="^keys_list$"))
     bot.add_handler(CallbackQueryHandler(keys_del, pattern="^keys_del$"))
     bot.add_handler(CallbackQueryHandler(keys_del_confirm, pattern="^keys_del_confirm$"))

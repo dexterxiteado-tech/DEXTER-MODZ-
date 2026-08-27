@@ -47,8 +47,9 @@ ADMIN_ID = 6841201622
 # ==================== DIRECTORIOS ====================
 TEMP_DIR = "temp"
 UPLOADS_DIR = "static/uploads"
+STATIC_DIR = "static"
 
-for dir_path in [TEMP_DIR, UPLOADS_DIR]:
+for dir_path in [TEMP_DIR, UPLOADS_DIR, STATIC_DIR]:
     os.makedirs(dir_path, exist_ok=True)
 
 START_TIME = time.time()
@@ -162,7 +163,7 @@ def get_file_list(folder):
 # ==================== SEGURIDAD WEB ====================
 @app.before_request
 def proteger():
-    libres = ["/", "/bot/post", "/webhook", "/logout", "/gato", "/downloader", "/uploads"]
+    libres = ["/", "/bot/post", "/webhook", "/logout", "/gato", "/downloader", "/uploads", "/static"]
     if request.path.startswith("/static") or request.path.startswith("/uploads"):
         return
     if request.path in libres:
@@ -170,6 +171,10 @@ def proteger():
     if not session.get("login"):
         return redirect("/")
     session.modified = True
+
+@app.route('/static/<path:filename>')
+def serve_static(filename):
+    return send_from_directory(STATIC_DIR, filename)
 
 @app.route('/uploads/<path:filename>')
 def serve_upload(filename):
@@ -489,7 +494,7 @@ async def upload_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await show_main_menu(query, ctx)
     return ConversationHandler.END
 
-# ==================== AGREGAR VIDEO (LINK YT + LINK DESCARGA) ====================
+# ==================== AGREGAR VIDEO ====================
 async def yt_add_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -505,7 +510,7 @@ async def yt_add_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "`https://youtu.be/xxxxx`\n"
         "`https://www.youtube.com/watch?v=xxxxx`\n"
         "`https://youtube.com/shorts/xxxxx`\n\n"
-        "📌 **PASO 2:** Luego envía el **link de descarga** (MediaFire, Mega, etc.)\n\n"
+        "📌 **PASO 2:** Luego envía el **link de descarga**\n\n"
         "🔴 Presiona 'Cancelar' para salir.",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown"
@@ -563,14 +568,11 @@ async def yt_receive_download(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
         return WAITING_YT_DOWNLOAD
     
-    # OBTENER DATOS DEL CONTEXTO
     yt_url = ctx.user_data.get('yt_url', '')
     video_id = ctx.user_data.get('yt_id', '')
     thumb_url = ctx.user_data.get('thumb_url', '')
     
-    # GUARDAR EN POSTS
     posts = load_posts()
-    
     posts.append({
         "youtube": yt_url,
         "video_id": video_id,
@@ -591,26 +593,11 @@ async def yt_receive_download(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 📹 **YouTube:** {yt_url}
 📥 **Descarga:** {download_link}"""
     
-    if thumb_url:
-        try:
-            await update.message.reply_photo(
-                photo=thumb_url,
-                caption=message,
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode="Markdown"
-            )
-        except:
-            await update.message.reply_text(
-                message,
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode="Markdown"
-            )
-    else:
-        await update.message.reply_text(
-            message,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode="Markdown"
-        )
+    await update.message.reply_text(
+        message,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
     
     ctx.user_data.clear()
     return ConversationHandler.END
@@ -759,6 +746,7 @@ async def menu_store(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
+# ==================== AGREGAR PRODUCTO ====================
 async def store_add_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -906,7 +894,7 @@ async def store_receive_link(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"💰 **Precio:** `{ctx.user_data.get('store_price')}`\n"
         f"📄 **Descripción:** {ctx.user_data.get('store_desc')}\n"
         f"🔗 **Link:** {link}\n\n"
-        f"📸 Puedes enviar una imagen para el producto.",
+        f"📸 **Ahora envía una imagen** para el producto.",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown"
     )
@@ -930,6 +918,75 @@ async def store_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await show_main_menu(query, ctx)
     return ConversationHandler.END
 
+# ==================== RECIBIR IMAGEN PARA PRODUCTO ====================
+async def foto_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Recibe una imagen y la asigna al último producto sin imagen"""
+    if not is_admin(update):
+        return
+
+    if not update.message.photo:
+        return
+
+    try:
+        # Obtener la imagen
+        file = await update.message.photo[-1].get_file()
+        
+        # Generar nombre único
+        timestamp = int(time.time())
+        random_num = random.randint(1000, 9999)
+        filename = f"store_{timestamp}_{random_num}.jpg"
+        path = os.path.join("static", filename)
+        
+        # Descargar imagen
+        await file.download_to_drive(path)
+        
+        # Cargar productos
+        data = load_store()
+        
+        if not data:
+            await update.message.reply_text("❌ No hay productos en la tienda")
+            if os.path.exists(path):
+                os.remove(path)
+            return
+        
+        # 🔥 BUSCAR EL ÚLTIMO PRODUCTO SIN IMAGEN
+        producto_encontrado = None
+        for i in range(len(data) - 1, -1, -1):  # Recorrer de atrás hacia adelante
+            if not data[i].get("imagen") or data[i].get("imagen") in [None, 'None', 'null', '']:
+                producto_encontrado = i
+                break
+        
+        if producto_encontrado is not None:
+            # Asignar imagen al producto
+            data[producto_encontrado]["imagen"] = "/" + path
+            save_store(data)
+            nombre_producto = data[producto_encontrado].get('nombre', 'sin nombre')
+            
+            keyboard = [
+                [InlineKeyboardButton("📋 Ver Tienda", callback_data="menu_store")],
+                [InlineKeyboardButton("🔙 Menú Principal", callback_data="back_main")]
+            ]
+            
+            await update.message.reply_text(
+                f"✅ **Imagen guardada para:** `{nombre_producto}`\n\n"
+                f"📁 Ruta: `{path}`",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode="Markdown"
+            )
+            print(f"✅ Imagen guardada: {path} para {nombre_producto}")
+        else:
+            await update.message.reply_text(
+                "❌ **Todos los productos ya tienen imagen**\n\n"
+                "Si quieres cambiar la imagen, elimina el producto y créalo de nuevo.",
+                parse_mode="Markdown"
+            )
+            if os.path.exists(path):
+                os.remove(path)
+                
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error al guardar imagen: {e}")
+        print(f"❌ Error en foto_handler: {e}")
+
 # ==================== LISTAR PRODUCTOS ====================
 async def store_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -944,6 +1001,8 @@ async def store_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     txt = "🛒 **PRODUCTOS:**\n\n"
     for i, p in enumerate(data):
         txt += f"{i}. **{p.get('nombre')}** | ${p.get('precio')}\n"
+        if p.get('imagen'):
+            txt += f"   🖼️ [Ver imagen]({p['imagen']})\n"
     
     await query.edit_message_text(txt, parse_mode="Markdown")
     await asyncio.sleep(2)
@@ -1199,7 +1258,7 @@ async def menu_info(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 📌 **Funciones:**
 • 📤 Subir archivos (con opción de borrar)
 • 📹 Gestión de videos (thumbnail automático + link descarga)
-• 🛒 Tienda
+• 🛒 Tienda (con imágenes)
 • 🔑 Keys (hasta 5000)
 
 🌐 **Web:** {web_url}
@@ -1279,6 +1338,9 @@ def setup_bot():
         allow_reentry=True
     )
     bot.add_handler(keys_conv)
+    
+    # ===== RECIBIR IMAGEN (SIN CONVERSACIÓN) =====
+    bot.add_handler(MessageHandler(filters.PHOTO, foto_handler))
     
     # ===== CALLBACKS =====
     bot.add_handler(CallbackQueryHandler(menu_yt, pattern="^menu_yt$"))

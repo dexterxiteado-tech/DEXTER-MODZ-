@@ -215,17 +215,21 @@ async def start_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⛔ No autorizado")
         return
     
+    web_url = PUBLIC_URL or "https://dexter-modz-sk.onrender.com"
+    
     keyboard = [
         [InlineKeyboardButton("📤 Subir Archivo", callback_data="upload_file")],
         [InlineKeyboardButton("📹 YouTube", callback_data="menu_yt")],
         [InlineKeyboardButton("🛒 Tienda", callback_data="menu_store")],
         [InlineKeyboardButton("🔑 Keys", callback_data="menu_keys")],
         [InlineKeyboardButton("📊 Estadísticas", callback_data="menu_stats")],
+        [InlineKeyboardButton("🌐 Mi Web", url=web_url)],
         [InlineKeyboardButton("ℹ️ Info", callback_data="menu_info")]
     ]
     
     await update.message.reply_text(
-        "🤖 **PAPI DEXTER BOT**\n\n"
+        f"🤖 **PAPI DEXTER BOT**\n\n"
+        f"🌐 **Web:** {web_url}\n\n"
         "📤 **Sube archivos a tu web**\n"
         "📹 **Agrega videos de YouTube**\n\n"
         "Selecciona una opción:",
@@ -693,6 +697,8 @@ async def menu_stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     hours = uptime_sec // 3600
     minutes = (uptime_sec % 3600) // 60
     
+    web_url = PUBLIC_URL or "https://dexter-modz-sk.onrender.com"
+    
     txt = f"""📊 **ESTADÍSTICAS**
 
 📹 Videos: {posts}
@@ -702,6 +708,8 @@ async def menu_stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 📁 **Archivos subidos:** {len(files)}
 📦 **Espacio usado:** {total_mb:.2f} MB
 💾 **Límite Render:** ~1 GB
+
+🌐 **Web:** {web_url}
 
 ⏱️ Uptime: {hours}h {minutes}m"""
     
@@ -718,7 +726,9 @@ async def menu_info(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
-    txt = """ℹ️ **PAPI DEXTER BOT**
+    web_url = PUBLIC_URL or "https://dexter-modz-sk.onrender.com"
+    
+    txt = f"""ℹ️ **PAPI DEXTER BOT**
 
 🤖 Bot de gestión de archivos
 
@@ -727,6 +737,8 @@ async def menu_info(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 • 📹 Gestión de videos (con thumbnail)
 • 🛒 Tienda
 • 🔑 Keys
+
+🌐 **Web:** {web_url}
 
 ⚡ Versión 6.0 - Con Thumbnails de YouTube"""
     
@@ -738,17 +750,24 @@ async def back_main(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
+    web_url = PUBLIC_URL or "https://dexter-modz-sk.onrender.com"
+    
     keyboard = [
         [InlineKeyboardButton("📤 Subir Archivo", callback_data="upload_file")],
         [InlineKeyboardButton("📹 YouTube", callback_data="menu_yt")],
         [InlineKeyboardButton("🛒 Tienda", callback_data="menu_store")],
         [InlineKeyboardButton("🔑 Keys", callback_data="menu_keys")],
         [InlineKeyboardButton("📊 Estadísticas", callback_data="menu_stats")],
+        [InlineKeyboardButton("🌐 Mi Web", url=web_url)],
         [InlineKeyboardButton("ℹ️ Info", callback_data="menu_info")]
     ]
     
     await query.edit_message_text(
-        "🤖 **PAPI DEXTER BOT**\n\nSelecciona una opción:",
+        f"🤖 **PAPI DEXTER BOT**\n\n"
+        f"🌐 **Web:** {web_url}\n\n"
+        "📤 **Sube archivos a tu web**\n"
+        "📹 **Agrega videos de YouTube**\n\n"
+        "Selecciona una opción:",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown"
     )
@@ -871,7 +890,7 @@ async def run_bot():
     bot = setup_bot()
     await bot.initialize()
     await bot.start()
-    print("✅ Bot iniciado con Thumbnails de YouTube")
+    print(f"✅ Bot iniciado - Web: {PUBLIC_URL or 'https://dexter-modz-sk.onrender.com'}")
     await bot.updater.start_polling()
     await asyncio.Event().wait()
 

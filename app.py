@@ -12,7 +12,7 @@ import threading
 import shutil
 import hashlib
 import requests
-from datetime import timedelta, datetime
+from datetime import timedelta
 from pathlib import Path
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
@@ -39,7 +39,6 @@ MASTER_KEY = os.environ.get("MASTER_KEY", "CHINITA")
 DB_FILE = "database.json"
 KEYS_FILE = "keys.json"
 STORE_FILE = "store.json"
-SUGGESTIONS_FILE = "suggestions.json"
 
 TOKEN = os.environ.get("BOT_TOKEN")
 PUBLIC_URL = os.environ.get("PUBLIC_URL")
@@ -96,12 +95,6 @@ def load_store():
 
 def save_store(d):
     save_json(STORE_FILE, d)
-
-def load_suggestions():
-    return load_json(SUGGESTIONS_FILE)
-
-def save_suggestions(d):
-    save_json(SUGGESTIONS_FILE, d)
 
 def gen_key():
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=16))
@@ -167,20 +160,10 @@ def get_file_list(folder):
                 files.append(f)
     return sorted(files)
 
-# ==================== FILTRO PARA FECHAS ====================
-@app.template_filter('timestamp_to_datetime')
-def timestamp_to_datetime(timestamp):
-    if not timestamp:
-        return "Fecha desconocida"
-    try:
-        return datetime.fromtimestamp(timestamp).strftime("%d/%m/%Y %H:%M")
-    except:
-        return "Fecha inválida"
-
 # ==================== SEGURIDAD WEB ====================
 @app.before_request
 def proteger():
-    libres = ["/", "/bot/post", "/webhook", "/logout", "/gato", "/downloader", "/uploads", "/static", "/suggestions", "/suggestion"]
+    libres = ["/", "/bot/post", "/webhook", "/logout", "/gato", "/downloader", "/uploads", "/static"]
     if request.path.startswith("/static") or request.path.startswith("/uploads"):
         return
     if request.path in libres:
@@ -223,12 +206,7 @@ def logout():
 
 @app.route("/panel")
 def panel():
-    sugerencias = load_suggestions()
-    sugerencias_pendientes = sum(1 for s in sugerencias if s.get('estado') == 'pendiente')
-    return render_template(
-        "panel.html",
-        sugerencias_pendientes=sugerencias_pendientes
-    )
+    return render_template("panel.html")
 
 @app.route("/posts")
 def posts():
@@ -237,63 +215,6 @@ def posts():
 @app.route("/store")
 def store():
     return render_template("store.html", productos=load_store())
-
-@app.route("/suggestions", methods=["GET", "POST"])
-def suggestions():
-    if request.method == "POST":
-        nombre = request.form.get("nombre", "Anónimo").strip()
-        mensaje = request.form.get("mensaje", "").strip()
-        
-        if not mensaje:
-            return render_template(
-                "suggestions.html",
-                sugerencias=load_suggestions(),
-                error="❌ El mensaje no puede estar vacío"
-            )
-        
-        sugerencias = load_suggestions()
-        sugerencias.append({
-            "usuario": nombre or "Anónimo",
-            "mensaje": mensaje,
-            "fecha": time.time(),
-            "estado": "pendiente"
-        })
-        save_suggestions(sugerencias)
-        
-        return render_template(
-            "suggestions.html",
-            sugerencias=load_suggestions(),
-            success="✅ ¡Gracias por tu sugerencia!"
-        )
-    
-    return render_template(
-        "suggestions.html",
-        sugerencias=load_suggestions()
-    )
-
-@app.route('/suggestion/read/<int:index>', methods=['POST'])
-def suggestion_read(index):
-    try:
-        sugerencias = load_suggestions()
-        if 0 <= index < len(sugerencias):
-            sugerencias[index]['estado'] = 'leido'
-            save_suggestions(sugerencias)
-            return jsonify({"ok": True})
-        return jsonify({"error": "Índice inválido"}), 400
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/suggestion/delete/<int:index>', methods=['POST'])
-def suggestion_delete(index):
-    try:
-        sugerencias = load_suggestions()
-        if 0 <= index < len(sugerencias):
-            sugerencias.pop(index)
-            save_suggestions(sugerencias)
-            return jsonify({"ok": True})
-        return jsonify({"error": "Índice inválido"}), 400
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 @app.route("/gato")
 def gato():
